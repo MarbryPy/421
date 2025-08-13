@@ -134,8 +134,8 @@
 
   // ---- Sounds (minimal)
   const AC = window.AudioContext||window.webkitAudioContext; const ctx = new AC();
-  function tone(f,d=0.12,t='sine',v=0.05){const o=ctx.createOscillator(),g=ctx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(ctx.destination);o.start();setTimeout(()=>o.stop(),d*1000);}
-  function yourTurnSound(){ try{ tone(880); setTimeout(()=>tone(1175),120); }catch(e){} }
+  function tone(f,d=0.12,t='sine',v=0.05){try{const o=ctx.createOscillator(),g=ctx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(ctx.destination);o.start();setTimeout(()=>o.stop(),d*1000);}catch(e){}}
+  function yourTurnSound(){ tone(880); setTimeout(()=>tone(1175),120); }
 
   // ---- Rules
   const sortAsc=a=>[...a].sort((x,y)=>x-y), sortDesc=a=>[...a].sort((x,y)=>y-x);
@@ -174,7 +174,6 @@
     .map(k=>parseInt(k,10))
     .filter(n=>!Number.isNaN(n))
     .sort((a,b)=>a-b);
-
   const joinedSeats = room => seatKeys(room).filter(i=>room.players[i]?.id);
 
   function setMiniDice(container, dice){
@@ -240,7 +239,24 @@
   el.leaveBtn.addEventListener('click', ()=>location.reload());
 
   // ---- Subscription
-  function subscribe(){ onValue(ref(db,'rooms/'+roomId), (snap)=>{ if(!snap.exists()) return; render(snap.val()); }); }
+  let lastRoom = null, watchdogBusy = false;
+  function subscribe(){
+    onValue(ref(db,'rooms/'+roomId), (snap)=>{
+      if(!snap.exists()) return;
+      lastRoom = snap.val();
+      render(lastRoom);
+    });
+    // extra watchdog every 1.2s (belt & suspenders)
+    setInterval(async()=>{
+      if (watchdogBusy || !lastRoom) return;
+      const seats = joinedSeats(lastRoom);
+      const allDone = lastRoom.started && !lastRoom.gameOver && seats.length>0 && seats.every(i=>lastRoom.players[i].done);
+      if (allDone) {
+        watchdogBusy = true;
+        try{ await settleTransaction(); } finally { watchdogBusy = false; }
+      }
+    }, 1200);
+  }
 
   function renderPlayers(room){
     const cont = el.players;
@@ -280,6 +296,15 @@
     const myTurn = !!(me && room.started && room.current===seat && !me.done);
     el.currentPlayer.textContent = room.players[room.current]?.name || '—';
     el.rollsLeft.textContent = me ? (me.rollsLeft ?? '—') : '—';
+
+    // winner overlay
+    if(room.gameOver){
+      el.overlay.style.display='flex';
+      const w = room.winnerSeat!=null ? (room.players[room.winnerSeat]?.name || '—') : '—';
+      el.winnerName.textContent = w;
+    } else {
+      el.overlay.style.display='none';
+    }
 
     // dice UI (mine)
     el.dice.innerHTML='';
@@ -374,7 +399,7 @@
 
   async function endTurn(){
     if (!roomId) return;
-    const rs=await get(ref(db,'rooms/'+roomId)); let room=rs.val(); const me=room.players[seat];
+    const rs=await get(ref(db,'rooms/'+roomId')); let room=rs.val(); const me=room.players[seat];
     if(!room.started || room.current!==seat || me.done) return;
     if(me.rollsLeft===3) await rollSelected();
     const me2 = (await get(ref(db,'rooms/'+roomId+'/players/'+seat))).val();
@@ -418,6 +443,7 @@
       const winnerRank = rankOf(bestSeat);
       const amount = winnerPoints(winnerRank);
 
+      // winner pays loser, toward 0
       if(amount>0 && bestSeat!=null && worstSeat!=null){
         const before = room.players[bestSeat].score|0;
         const paid = Math.min(before, amount);
@@ -435,7 +461,7 @@
         return room;
       }
 
-      // next round: loser starts
+      // next round: loser starts; reset all joined players
       const nextStarter = worstSeats[0];
       room.round = (room.round||1)+1;
       room.current = nextStarter;
@@ -474,3 +500,4 @@
 </script>
 </body>
 </html>
+
