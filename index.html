@@ -209,8 +209,15 @@
     $('#lobby').style.display='none'; $('#game').style.display='block'; $('#players').style.display='grid'; $('#logCard').style.display='block'; $('#roomCode').textContent=code;
     subscribe();
   }
-  document.getElementById('createBtn').addEventListener('click', async()=>{try{await createRoom();}catch(e){alert('Erreur création: '+(e&&e.message||e));console.error(e);});
-  document.getElementById('joinBtn').addEventListener('click', async()=>{try{await joinRoom($('#roomInput').value);}catch(e){alert('Erreur rejoindre: '+(e&&e.message||e));console.error(e);});
+
+  document.getElementById('createBtn').addEventListener('click', async () => {
+  try { await createRoom(); }
+  catch (e) { alert('Erreur création: ' + (e && e.message || e)); console.error(e); }});
+
+  document.getElementById('joinBtn').addEventListener('click', async () => {
+  try { await joinRoom($('#roomInput').value); }
+  catch (e) { alert('Erreur rejoindre: ' + (e && e.message || e)); console.error(e); }});
+  
   document.getElementById('leaveBtn').addEventListener('click', ()=>location.reload());
 
   // ---- Live subscription
