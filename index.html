@@ -107,19 +107,7 @@
   const app = initializeApp(cfg);
   const db = getDatabase(app);
   const $ = s => document.querySelector(s);
-  const el = {
-    lobby: $('#lobby'), game: $('#game'), players: $('#players'), logCard: $('#logCard'),
-    displayName: $('#displayName'), roomInput: $('#roomInput'), startPoints: $('#startPoints'),
-    createBtn: $('#createBtn'), joinBtn: $('#joinBtn'), startBtn: $('#startBtn'), leaveBtn: $('#leaveBtn'),
-    roomCode: $('#roomCode'), interBanner: $('#interBanner'),
-    currentPlayer: $('#currentPlayer'), rollsLeft: $('#rollsLeft'),
-    dice: $('#dice'), comboHint: $('#comboHint'), rollBtn: $('#rollBtn'), toggleAllBtn: $('#toggleAllBtn'), endTurnBtn: $('#endTurnBtn'),
-    n0: $('#n0'), n1: $('#n1'), n2: $('#n2'), s0: $('#s0'), s1: $('#s1'), s2: $('#s2'), r0: $('#r0'), r1: $('#r1'), r2: $('#r2'),
-    m0: $('#m0'), m1: $('#m1'), m2: $('#m2'),
-    log: $('#log'), overlay: $('#overlay'), winnerName: $('#winnerName'), replayBtn: $('#replayBtn')
-  };
-
-  // ---- Persistence to prevent rooms/null
+  
   let roomId = localStorage.getItem('r421_roomId') || null;
   let myId   = localStorage.getItem('r421_myId') || (Math.random().toString(36).slice(2,10));
   localStorage.setItem('r421_myId', myId);
@@ -128,7 +116,7 @@
 
   function safePath(patches) {
     if (!roomId) return null;
-    const out = {} };
+    const out = {};
     for (const k in patches) out[`rooms/${roomId}/${k}`] = patches[k];
     return out;
   }
