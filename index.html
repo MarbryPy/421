@@ -370,61 +370,72 @@
   }
   document.getElementById('endTurnBtn').addEventListener('click', endTurn);
 
-  async function settleTransaction(){
-    if (!roomId) return;
-    await runTransaction(ref(db,'rooms/'+roomId), (room)=>{
-      if(!room) return room;
-      const joined=[0,1,2].filter(i=>room.players[i] && room.players[i].id);
-      if(joined.length<2) return room;
-      // rank
-      const ranked=joined.map(i=>({i, r:(room.players[i].lastRank || rankHand(room.players[i].dice))})).sort((a,b)=>((a.r.order===b.r.order)?0:(a.r.order>b.r.order?1:-1))).reverse();
-      const bestSeats = ranked.filter(x=>(((x.r.order===ranked[0].r.order)?0:((x.r.order>ranked[0].r.order)?1:-1)))===0).map(x=>x.i);
-      const worstSeats = ranked.filter(x=>(((x.r.order===ranked[ranked.length-1].r.order)?0:((x.r.order>ranked[ranked.length-1].r.order)?1:-1)))===0).map(x=>x.i);
-      const bestSeat = bestSeats[0];
-      const worstSeat = worstSeats[0];
-      const winnerRank = room.players[bestSeat].lastRank || rankHand(room.players[bestSeat].dice);
-      const amount = (function(rank){ switch(rank.category){ case '421': return 8; case '111': return 7; case '11x': return rank.meta?.x||0; case 'Brelan': return rank.meta?.x||0; case 'Suite': return 2; case 'Paire': return 1; case 'Haute': return 1; default: return 0; } })(winnerRank);
-      if(amount>0 && bestSeat!=null && worstSeat!=null){
-        const before = room.players[bestSeat].score;
-        const paid = Math.min(before, amount);
-        room.players[bestSeat].score = before - paid;
-        room.players[worstSeat].score = (room.players[worstSeat].score||0) + paid;
-        room.lastTransfer = { payer: bestSeat, payee: worstSeat, amount: paid, combo: winnerRank.label };
-      }
-      // win condition
-      let winnerSeat=null;
-      for(const i of joined) if(room.players[i].score===0) { winnerSeat=i; break; }
-      if(winnerSeat!=null){
-        room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat;
-        return room;
-      }
-      // next round: loser starts
-      const nextStarter = worstSeats[0];
-      room.round = (room.round||1)+1;
-      room.current = nextStarter;
-      room.firstRollsLimit = null;
-      joined.forEach(i=>{ const p=room.players[i]; room.players[i] = { ...p, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 }; });
-      return room;
-    });
-    // append transfer log
-    const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
-    if(room.lastTransfer){
-      const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
-      const q=room.players[room.lastTransfer.payee]?.name||'Joueur';
-      await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`);
-      await safeUpdate({ lastTransfer: null });
-    }
-  }
+ async function settleTransaction(){
+  if (!roomId) return;
+  await runTransaction(ref(db,'rooms/'+roomId), (room)=>{
+    if(!room) return room;
+    const joined=[0,1,2].filter(i=>room.players[i] && room.players[i].id);
+    if(joined.length<2) return room;
 
-  document.getElementById('replayBtn').addEventListener('click', async ()=>{
-    if (!roomId) return;
-    const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
-    const joined=[0,1,2].filter(i=>room.players[i].id);
-    const upd={};
-    joined.forEach(i=>{ const base=room.startPoints||10; const p=room.players[i]; upd['players/'+i]={...p, score:base, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0}; });
-    upd['gameOver']=false; upd['winnerSeat']=null; upd['started']=false; upd['firstRollsLimit']=null;
-    await safeUpdate(upd);
+    // rank (higher order = better)
+    const rankOf = (i)=> (room.players[i].lastRank || rankHand(room.players[i].dice));
+    const ranked = joined.map(i=>({ i, r: rankOf(i) }))
+                         .sort((a,b)=>a.r.order-b.r.order).reverse();
+
+    const topOrder = ranked[0].r.order;
+    const botOrder = ranked[ranked.length-1].r.order;
+    const bestSeats  = ranked.filter(x=>x.r.order===topOrder).map(x=>x.i);
+    const worstSeats = ranked.filter(x=>x.r.order===botOrder).map(x=>x.i);
+
+    const bestSeat  = bestSeats[0];
+    const worstSeat = worstSeats[0];
+    const winnerRank = rankOf(bestSeat);
+    const amount = winnerPoints(winnerRank);
+
+    // transfer (winner pays loser; scores go toward 0)
+    if(amount>0 && bestSeat!=null && worstSeat!=null){
+      const before = room.players[bestSeat].score|0;
+      const paid   = Math.min(before, amount);
+      room.players[bestSeat].score = before - paid;
+      room.players[worstSeat].score = (room.players[worstSeat].score|0) + paid;
+      room.lastTransfer = { payer: bestSeat, payee: worstSeat, amount: paid, combo: winnerRank.label };
+    }
+
+    // victory?
+    let winnerSeat=null;
+    for(const i of joined) if((room.players[i].score|0)===0){ winnerSeat=i; break; }
+    if(winnerSeat!=null){
+      room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat;
+      room.lastSettle = Date.now(); // 🔧 ensure a state change
+      return room;
+    }
+
+    // next round: loser starts (even on tie)
+    const nextStarter = worstSeats[0];
+    room.round = (room.round||1)+1;
+    room.current = nextStarter;
+    room.firstRollsLimit = null;
+
+    // reset all joined players
+    joined.forEach(i=>{
+      const p=room.players[i];
+      room.players[i] = { ...p, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 };
+    });
+
+    room.lastSettle = Date.now(); // 🔧 force a diff so clients re-render
+    return room;
   });
+
+  // log & clear the transfer marker
+  const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
+  if(room.lastTransfer){
+    const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
+    const q=room.players[room.lastTransfer.payee]?.name||'Joueur';
+    await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`);
+    await safeUpdate({ lastTransfer: null });
+  }
+ }
+  
 </script>
 </body>
 </html>
