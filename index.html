@@ -32,6 +32,7 @@
   .log p { margin:0 0 8px 0; }
   .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; padding:20px; }
   .dialog { background:#0b1220; border:1px solid #1f2937; border-radius:14px; padding:18px; max-width:420px; width:90%; text-align:center; }
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:16px; background:#0b1220; border:1px solid #f43f5e55; color:#fecaca; padding:10px 14px; border-radius:10px; display:none; z-index:999; }
 </style>
 </head>
 <body>
@@ -79,7 +80,6 @@
     </div>
   </section>
 
-  <!-- Dynamic players grid -->
   <section id="players" class="players" style="display:none;"></section>
 
   <section id="logCard" class="card" style="display:none;">
@@ -95,6 +95,7 @@
     <button id="replayBtn" class="primary">Rejouer (mêmes joueurs)</button>
   </div>
 </div>
+<div id="toast" class="toast"></div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
@@ -105,7 +106,9 @@
   const db = getDatabase(app);
   const $ = s => document.querySelector(s);
 
-  /* === DOM cache === */
+  const toast = $('#toast');
+  function notify(msg){ toast.textContent = msg; toast.style.display='block'; clearTimeout(notify._t); notify._t=setTimeout(()=>toast.style.display='none', 3500); }
+
   const el = {
     lobby: $('#lobby'), game: $('#game'), players: $('#players'), logCard: $('#logCard'),
     displayName: $('#displayName'), roomInput: $('#roomInput'), startPoints: $('#startPoints'),
@@ -116,7 +119,7 @@
     log: $('#log'), overlay: $('#overlay'), winnerName: $('#winnerName'), replayBtn: $('#replayBtn')
   };
 
-  // ---- Persistence
+  // Persistence
   let roomId = localStorage.getItem('r421_roomId') || null;
   let myId   = localStorage.getItem('r421_myId') || (Math.random().toString(36).slice(2,10));
   localStorage.setItem('r421_myId', myId);
@@ -130,14 +133,14 @@
     return out;
   }
   async function safeUpdate(patches) { if (!roomId) return; await update(ref(db), safePath(patches)); }
-  async function appendLog(msg){ if (!roomId) return; try { await push(ref(db, `rooms/${roomId}/log`), { t: Date.now(), msg }); } catch(e){} }
+  async function appendLog(msg){ if (!roomId) return; try { await push(ref(db, `rooms/${roomId}/log`), { t: Date.now(), msg }); } catch(e){ notify('Log: '+e.message); } }
 
-  // ---- Sounds (minimal)
+  // Sounds
   const AC = window.AudioContext||window.webkitAudioContext; const ctx = new AC();
   function tone(f,d=0.12,t='sine',v=0.05){try{const o=ctx.createOscillator(),g=ctx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(ctx.destination);o.start();setTimeout(()=>o.stop(),d*1000);}catch(e){}}
   function yourTurnSound(){ tone(880); setTimeout(()=>tone(1175),120); }
 
-  // ---- Rules
+  // Rules
   const sortAsc=a=>[...a].sort((x,y)=>x-y), sortDesc=a=>[...a].sort((x,y)=>y-x);
   const is421 = d => (sortDesc(d)[0]===4 && sortDesc(d)[1]===2 && sortDesc(d)[2]===1);
   const isBrelan = d => d[0]===d[1] && d[1]===d[2];
@@ -169,11 +172,8 @@
     }
   }
 
-  // ---- Dynamic seats helpers
-  const seatKeys = room => Object.keys(room.players||{})
-    .map(k=>parseInt(k,10))
-    .filter(n=>!Number.isNaN(n))
-    .sort((a,b)=>a-b);
+  // Seats helpers
+  const seatKeys = room => Object.keys(room.players||{}).map(k=>parseInt(k,10)).filter(n=>!Number.isNaN(n)).sort((a,b)=>a-b);
   const joinedSeats = room => seatKeys(room).filter(i=>room.players[i]?.id);
 
   function setMiniDice(container, dice){
@@ -183,62 +183,83 @@
     });
   }
 
-  // ---- Lobby actions
+  // Lobby
   async function createRoom(){
-    const code=($('#roomInput').value.trim()||Math.random().toString(36).slice(2,7)).toUpperCase();
-    const startPts = Math.max(1, Math.min(99, parseInt($('#startPoints').value||'10',10)));
-    const init={ createdAt:Date.now(), started:false, locked:false, gameOver:false, startPoints:startPts,
-      current:0, round:1, firstRollsLimit:null, players:{}, log:[] };
-    await set(ref(db,'rooms/'+code), init);
-    roomId=code; localStorage.setItem('r421_roomId', roomId);
-    await joinRoom(code);
+    try{
+      const code=($('#roomInput').value.trim()||Math.random().toString(36).slice(2,7)).toUpperCase();
+      const startPts = Math.max(1, Math.min(99, parseInt($('#startPoints').value||'10',10)));
+      const init={ createdAt:Date.now(), started:false, locked:false, gameOver:false, startPoints:startPts,
+        current:0, round:1, firstRollsLimit:null, players:{}, log:[] };
+      await set(ref(db,'rooms/'+code), init);
+      roomId=code; localStorage.setItem('r421_roomId', roomId);
+      await joinRoom(code);
+    }catch(e){ notify('Création: '+e.message); console.error(e); }
   }
 
   async function joinRoom(code){
-    code=(code||$('#roomInput').value.trim()).toUpperCase();
-    if(!code) return alert('Code manquant');
-    const snap=await get(ref(db,'rooms/'+code));
-    if(!snap.exists()) return alert('Salle introuvable.');
-    const room=snap.val();
-    // refuse new joins after start (unless rejoin same seat)
-    if(room.started && room.locked){
-      let already=false;
-      for(const s of seatKeys(room)) if(room.players[s]?.id===myId) { already=true; break; }
-      if(!already) return alert('Partie en cours — rejoins avant le démarrage.');
-    }
-
-    // rejoin if already seated
-    seat=null;
-    for(const s of seatKeys(room)){ if(room.players[s]?.id===myId){ seat=s; break; } }
-
-    // claim lowest free seat if not started
-    if(seat===null && !room.started){
-      let seatIdx=0; const taken=new Set(seatKeys(room));
-      while(taken.has(seatIdx)) seatIdx++;
-      const path = `rooms/${code}/players/${seatIdx}`;
-      const res = await runTransaction(ref(db, path), (cur)=>{
-        if(!cur || !cur.id) return {
-          id: myId, name: ($('#displayName').value.trim()||'Joueur'),
-          score: room.startPoints||10, dice:[1,1,1], roll:[true,true,true],
-          rollsLeft:3, done:false, lastRank:null, rollsUsed:0
-        };
-        return cur;
-      });
-      if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; }
-      if(seat!==null) await appendLog(`🟢 ${($('#displayName').value.trim()||'Joueur')} a rejoint (J${seat+1})`);
-    }
-
-    roomId=code; localStorage.setItem('r421_roomId', roomId);
-    if(seat!==null) localStorage.setItem('r421_seat', String(seat));
-    el.lobby.style.display='none'; el.game.style.display='block'; el.players.style.display='grid'; el.logCard.style.display='block'; el.roomCode.textContent=code;
-    subscribe();
+    try{
+      code=(code||$('#roomInput').value.trim()).toUpperCase();
+      if(!code) return notify('Code manquant');
+      const snap=await get(ref(db,'rooms/'+code));
+      if(!snap.exists()) return notify('Salle introuvable.');
+      const room=snap.val();
+      if(room.started && room.locked){
+        let already=false;
+        for(const s of seatKeys(room)) if(room.players[s]?.id===myId) { already=true; break; }
+        if(!already) return notify('Partie en cours — rejoins avant le démarrage.');
+      }
+      // rejoin?
+      seat=null;
+      for(const s of seatKeys(room)){ if(room.players[s]?.id===myId){ seat=s; break; } }
+      // claim free seat (pre-start)
+      if(seat===null && !room.started){
+        let seatIdx=0; const taken=new Set(seatKeys(room)); while(taken.has(seatIdx)) seatIdx++;
+        const path = `rooms/${code}/players/${seatIdx}`;
+        const res = await runTransaction(ref(db, path), (cur)=>{
+          if(!cur || !cur.id) return {
+            id: myId, name: ($('#displayName').value.trim()||'Joueur'),
+            score: room.startPoints||10, dice:[1,1,1], roll:[true,true,true],
+            rollsLeft:3, done:false, lastRank:null, rollsUsed:0
+          };
+          return cur;
+        });
+        if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; }
+        if(seat!==null) await appendLog(`🟢 ${($('#displayName').value.trim()||'Joueur')} a rejoint (J${seat+1})`);
+      }
+      roomId=code; localStorage.setItem('r421_roomId', roomId);
+      if(seat!==null) localStorage.setItem('r421_seat', String(seat));
+      el.lobby.style.display='none'; el.game.style.display='block'; el.players.style.display='grid'; el.logCard.style.display='block'; el.roomCode.textContent=code;
+      subscribe();
+    }catch(e){ notify('Rejoindre: '+e.message); console.error(e); }
   }
 
-  el.createBtn.addEventListener('click', async()=>{ try{ await createRoom(); } catch(e){ alert('Erreur création: '+(e&&e.message||e)); console.error(e); }});
-  el.joinBtn.addEventListener('click', async()=>{ try{ await joinRoom($('#roomInput').value); } catch(e){ alert('Erreur rejoindre: '+(e&&e.message||e)); console.error(e); }});
-  el.leaveBtn.addEventListener('click', ()=>location.reload());
+  async function releaseSeat() {
+    if (!roomId || seat==null) return;
+    const rs = await get(ref(db,'rooms/'+roomId)); if (!rs.exists()) return;
+    const room = rs.val();
+    if (!room.started) {
+      const leavingName = room.players?.[seat]?.name || 'Joueur';
+      await update(ref(db), {
+        [`rooms/${roomId}/players/${seat}`]: {
+          id: "", name: "—", score: room.startPoints||10,
+          dice:[1,1,1], roll:[true,true,true],
+          rollsLeft:3, done:false, lastRank:null, rollsUsed:0
+        }
+      });
+      await appendLog(`🚪 ${leavingName} a quitté (J${seat+1})`);
+    }
+  }
 
-  // ---- Subscription
+  el.createBtn.addEventListener('click', createRoom);
+  el.joinBtn.addEventListener('click', ()=>joinRoom($('#roomInput').value));
+  el.leaveBtn.addEventListener('click', async ()=>{
+    try{ await releaseSeat(); }catch(e){}
+    localStorage.removeItem('r421_roomId');
+    localStorage.removeItem('r421_seat');
+    location.reload();
+  });
+
+  // Subscription + watchdog
   let lastRoom = null, watchdogBusy = false;
   function subscribe(){
     onValue(ref(db,'rooms/'+roomId), (snap)=>{
@@ -246,21 +267,16 @@
       lastRoom = snap.val();
       render(lastRoom);
     });
-    // extra watchdog every 1.2s (belt & suspenders)
     setInterval(async()=>{
       if (watchdogBusy || !lastRoom) return;
       const seats = joinedSeats(lastRoom);
       const allDone = lastRoom.started && !lastRoom.gameOver && seats.length>0 && seats.every(i=>lastRoom.players[i].done);
-      if (allDone) {
-        watchdogBusy = true;
-        try{ await settleTransaction(); } finally { watchdogBusy = false; }
-      }
+      if (allDone) { watchdogBusy = true; try{ await settleTransaction(); } finally { watchdogBusy = false; } }
     }, 1200);
   }
 
   function renderPlayers(room){
-    const cont = el.players;
-    cont.innerHTML = '';
+    const cont = el.players; cont.innerHTML = '';
     seatKeys(room).forEach(i=>{
       const p = room.players[i] || {};
       const card = document.createElement('div');
@@ -278,35 +294,27 @@
   }
 
   function render(room){
-    // log
     el.log.innerHTML='';
     const entries = room.log ? Object.values(room.log).sort((a,b)=>a.t-b.t) : [];
     entries.forEach(e=>{ const p=document.createElement('p'); p.textContent=e.msg; el.log.appendChild(p); });
 
-    // players grid
     renderPlayers(room);
 
-    // lobby/banner
     const seats = joinedSeats(room);
     el.startBtn.disabled = room.started || seats.length < 2;
     el.interBanner.textContent = room.started ? '' : `Joueurs prêts: ${seats.length} (min 2)`;
 
-    // current/me
     const me = (seat!=null && room.players[seat]) ? room.players[seat] : null;
     const myTurn = !!(me && room.started && room.current===seat && !me.done);
     el.currentPlayer.textContent = room.players[room.current]?.name || '—';
     el.rollsLeft.textContent = me ? (me.rollsLeft ?? '—') : '—';
 
-    // winner overlay
     if(room.gameOver){
       el.overlay.style.display='flex';
       const w = room.winnerSeat!=null ? (room.players[room.winnerSeat]?.name || '—') : '—';
       el.winnerName.textContent = w;
-    } else {
-      el.overlay.style.display='none';
-    }
+    } else el.overlay.style.display='none';
 
-    // dice UI (mine)
     el.dice.innerHTML='';
     const dice = me ? (me.dice||[1,1,1]) : [1,1,1];
     const firstRoll = me ? (me.rollsLeft===3) : false;
@@ -319,7 +327,6 @@
     });
     if(firstRoll && me) safeUpdate({ ['players/'+seat+'/roll']:[true,true,true] });
 
-    // roll limit enforcement
     const limit = room.firstRollsLimit;
     const disableRoll = !myTurn || (me && me.rollsLeft<=0) || (limit!=null && (3-me.rollsLeft) >= limit);
     el.toggleAllBtn.disabled = firstRoll || !myTurn;
@@ -328,21 +335,16 @@
 
     if(myTurn) yourTurnSound();
 
-    // 🔧 WATCHDOG: if all joined players are done -> settle
     const allDone = seats.length>0 && seats.every(i => room.players[i].done);
     if (room.started && !room.gameOver && allDone) {
       if (!render._settleScheduled) {
         render._settleScheduled = true;
-        setTimeout(async () => {
-          try { await settleTransaction(); }
-          finally { render._settleScheduled = false; }
-        }, 150);
+        setTimeout(async () => { try { await settleTransaction(); } finally { render._settleScheduled = false; } }, 150);
       }
     }
   }
 
   async function toggleRoll(i){
-    if (!roomId) return;
     const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const me=room.players[seat];
     if(!room.started || room.current!==seat || me.done) return;
     if(me.rollsLeft===3) return;
@@ -353,16 +355,16 @@
   async function startGame(){
     const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
     const seats=joinedSeats(room);
-    if(seats.length<2) return alert('Il faut au moins 2 joueurs.');
+    if(seats.length<2) return notify('Il faut au moins 2 joueurs.');
     const updates={};
     seats.forEach(i=>{
       const p=room.players[i];
       updates['players/'+i] = { ...p, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 };
     });
-    updates['current'] = seats[0]; // starter = first seat
+    updates['current'] = seats[0];
     updates['round'] = 1;
     updates['started'] = true;
-    updates['locked'] = true; // freeze seats
+    updates['locked'] = true;
     updates['gameOver'] = false;
     updates['firstRollsLimit'] = null;
     await safeUpdate(updates);
@@ -371,14 +373,12 @@
   el.startBtn.addEventListener('click', startGame);
 
   async function rollSelected(){
-    if (!roomId) return;
     const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const me=room.players[seat];
     if(!room.started || room.current!==seat || me.done || me.rollsLeft<=0) return;
-    // enforce round limit
     const limit = room.firstRollsLimit;
     const used = 3 - me.rollsLeft;
     if (limit!=null && used >= limit) return;
-    // animate then commit
+
     const dice=me.dice.slice();
     const toRoll=me.roll.map((x,idx)=>x?idx:null).filter(x=>x!==null);
     const final={}; toRoll.forEach(i=>final[i]= (1+Math.floor(Math.random()*6)));
@@ -398,18 +398,17 @@
   el.rollBtn.addEventListener('click', rollSelected);
 
   async function endTurn(){
-    if (!roomId) return;
-    const rs=await get(ref(db,'rooms/'+roomId')); let room=rs.val(); const me=room.players[seat];
+    const rs=await get(ref(db,'rooms/'+roomId)); let room=rs.val(); const me=room.players[seat];
     if(!room.started || room.current!==seat || me.done) return;
     if(me.rollsLeft===3) await rollSelected();
     const me2 = (await get(ref(db,'rooms/'+roomId+'/players/'+seat))).val();
     if(!me2.lastRank){ const r=rankHand(me2.dice); await safeUpdate({ ['players/'+seat+'/lastRank']: r }); }
     await safeUpdate({ ['players/'+seat+'/done']:true, ['players/'+seat+'/roll']:[false,false,false] });
-    // if first player ends, set round roll limit and log it
+
     const used = me2.rollsUsed || (3 - me2.rollsLeft);
     const limit = room.firstRollsLimit;
     if(limit==null){ await safeUpdate({ firstRollsLimit: used }); await appendLog(`🎯 Limite de lancers ce tour: ${used} (par ${me2.name||'Joueur'})`); }
-    // advance or settle
+
     room = (await get(ref(db,'rooms/'+roomId))).val();
     const seats=joinedSeats(room);
     const remaining = seats.filter(i=>!room.players[i].done);
@@ -424,7 +423,6 @@
   el.endTurnBtn.addEventListener('click', endTurn);
 
   async function settleTransaction(){
-    if (!roomId) return;
     await runTransaction(ref(db,'rooms/'+roomId), (room)=>{
       if(!room) return room;
       const seats = joinedSeats(room);
@@ -443,7 +441,6 @@
       const winnerRank = rankOf(bestSeat);
       const amount = winnerPoints(winnerRank);
 
-      // winner pays loser, toward 0
       if(amount>0 && bestSeat!=null && worstSeat!=null){
         const before = room.players[bestSeat].score|0;
         const paid = Math.min(before, amount);
@@ -452,7 +449,6 @@
         room.lastTransfer = { payer: bestSeat, payee: worstSeat, amount: paid, combo: winnerRank.label };
       }
 
-      // victory?
       let winnerSeat=null;
       for(const i of seats) if((room.players[i].score|0)===0) { winnerSeat=i; break; }
       if(winnerSeat!=null){
@@ -461,7 +457,6 @@
         return room;
       }
 
-      // next round: loser starts; reset all joined players
       const nextStarter = worstSeats[0];
       room.round = (room.round||1)+1;
       room.current = nextStarter;
@@ -475,7 +470,6 @@
       return room;
     });
 
-    // append transfer log
     const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
     if(room.lastTransfer){
       const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
@@ -486,7 +480,6 @@
   }
 
   el.replayBtn.addEventListener('click', async ()=>{
-    if (!roomId) return;
     const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
     const seats=joinedSeats(room);
     const upd={};
@@ -500,4 +493,3 @@
 </script>
 </body>
 </html>
-
