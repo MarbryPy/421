@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="fr">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -42,7 +43,9 @@
 <header>
   <h1>🎲 421 – Multi (Firebase, DEBUG)</h1>
   <div class="small">Aucun compte requis</div>
-</header><main>
+</header>
+
+<main>
   <section id="lobby" class="card">
     <h2>Créer / Rejoindre la salle</h2>
     <div class="row">
@@ -53,7 +56,9 @@
       <button id="joinBtn">Rejoindre</button>
     </div>
     <div class="small">Le créateur démarre quand tout le monde est là (min 2 joueurs).</div>
-  </section>  <section id="game" class="card" style="display:none;">
+  </section>
+
+  <section id="game" class="card" style="display:none;">
     <h2>Partie</h2>
     <div class="row" style="justify-content:space-between; align-items:start;">
       <div>
@@ -77,11 +82,17 @@
         <button id="leaveBtn">Quitter</button>
       </div>
     </div>
-  </section>  <section id="players" class="players" style="display:none;"></section>  <section id="logCard" class="card" style="display:none;">
+  </section>
+
+  <section id="players" class="players" style="display:none;"></section>
+
+  <section id="logCard" class="card" style="display:none;">
     <h2>Historique</h2>
     <div id="log" class="log"></div>
   </section>
-</main><div id="overlay" class="overlay">
+</main>
+
+<div id="overlay" class="overlay">
   <div class="dialog">
     <div style="font-size:22px; font-weight:800;">🎉 Vainqueur</div>
     <div id="winnerName" style="margin:8px 0 12px;">—</div>
@@ -96,7 +107,9 @@
     <button id="dbgCollapse">Collapse</button>
   </div>
   <pre id="dbgLog"></pre>
-</div><script type="module">
+</div>
+
+<script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
   import { getDatabase, ref, onValue, set as _origSet, update as _origUpdate, get, runTransaction as _origRunTx, push } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
@@ -251,5 +264,6 @@
       const nextStarter=worstSeats[0]; room.round=(room.round||1)+1; room.current=nextStarter; room.firstRollsLimit=null; seats.forEach(i=>{ const p=room.players[i]; room.players[i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0}; }); room.lastSettle=Date.now(); return room; }); const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); if(room.lastTransfer){ const p=room.players[room.lastTransfer.payer]?.name||'Joueur'; const q=room.players[room.lastTransfer.payee]?.name||'Joueur'; await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`); await safeUpdate({ lastTransfer: null }); } console.log('SETTLED'); }
 
   el.replayBtn.addEventListener('click', async ()=>{ const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const seats=joinedSeats(room); const upd={}; seats.forEach(i=>{ const base=room.startPoints||10; const p=room.players[i]; upd['players/'+i]={...p, score:base, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0}; }); upd['gameOver']=false; upd['winnerSeat']=null; upd['started']=false; upd['firstRollsLimit']=null; await safeUpdate(upd); console.log('REPLAY RESET'); });
-</script></body>
+</script>
+</body>
 </html>
