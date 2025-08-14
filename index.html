@@ -422,6 +422,11 @@
     [`players/${seat}/roll`]: [false,false,false]
   });
 
+
+console.log('ENDTURN: marked done for seat', seat);
+await dbgRoom();
+
+
   // set the round roll limit from the first finisher
   room = (await get(ref(db,'rooms/'+roomId))).val();
   const used = meNow.rollsUsed || (3 - meNow.rollsLeft);
