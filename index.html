@@ -1,9 +1,8 @@
-<!DOCTYPE html>
-<html lang="fr">
+<!DOCTYPE html><html lang="fr">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>421 – Multi (Firebase)</title>
+<title>421 – Multi (Firebase, DEBUG)</title>
 <style>
   :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --fg:#e5e7eb; --accent:#22d3ee; --btn:#1f2937; --warn:#f59e0b; --bad:#ef4444; }
   * { box-sizing: border-box; } body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; background:var(--bg); color:var(--fg); }
@@ -33,15 +32,17 @@
   .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; padding:20px; }
   .dialog { background:#0b1220; border:1px solid #1f2937; border-radius:14px; padding:18px; max-width:420px; width:90%; text-align:center; }
   .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:16px; background:#0b1220; border:1px solid #f43f5e55; color:#fecaca; padding:10px 14px; border-radius:10px; display:none; z-index:999; }
+  /* debug panel */
+  #dbgPanel { position:fixed; left:8px; right:8px; bottom:10px; max-height:40vh; overflow:auto; background:#0b1220; border:1px solid #334155; border-radius:10px; font:12px/1.3 system-ui; padding:8px; z-index:9999; color:#e5e7eb }
+  #dbgPanel pre{white-space:pre-wrap;margin:0;overflow-wrap:anywhere}
+  #dbgPanel button{background:#111827;border:1px solid #334155;border-radius:8px;padding:4px 8px;color:#e5e7eb}
 </style>
 </head>
 <body>
 <header>
-  <h1>🎲 421 – Multi (Firebase)</h1>
+  <h1>🎲 421 – Multi (Firebase, DEBUG)</h1>
   <div class="small">Aucun compte requis</div>
-</header>
-
-<main>
+</header><main>
   <section id="lobby" class="card">
     <h2>Créer / Rejoindre la salle</h2>
     <div class="row">
@@ -52,9 +53,7 @@
       <button id="joinBtn">Rejoindre</button>
     </div>
     <div class="small">Le créateur démarre quand tout le monde est là (min 2 joueurs).</div>
-  </section>
-
-  <section id="game" class="card" style="display:none;">
+  </section>  <section id="game" class="card" style="display:none;">
     <h2>Partie</h2>
     <div class="row" style="justify-content:space-between; align-items:start;">
       <div>
@@ -78,17 +77,11 @@
         <button id="leaveBtn">Quitter</button>
       </div>
     </div>
-  </section>
-
-  <section id="players" class="players" style="display:none;"></section>
-
-  <section id="logCard" class="card" style="display:none;">
+  </section>  <section id="players" class="players" style="display:none;"></section>  <section id="logCard" class="card" style="display:none;">
     <h2>Historique</h2>
     <div id="log" class="log"></div>
   </section>
-</main>
-
-<div id="overlay" class="overlay">
+</main><div id="overlay" class="overlay">
   <div class="dialog">
     <div style="font-size:22px; font-weight:800;">🎉 Vainqueur</div>
     <div id="winnerName" style="margin:8px 0 12px;">—</div>
@@ -96,52 +89,70 @@
   </div>
 </div>
 <div id="toast" class="toast"></div>
-
-
-<script type="module">
+<div id="dbgPanel">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+    <strong style="font-size:12px;">🔧 Debug</strong>
+    <button id="dbgClear" style="margin-left:auto;">Clear</button>
+    <button id="dbgCollapse">Collapse</button>
+  </div>
+  <pre id="dbgLog"></pre>
+</div><script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import { getDatabase, ref, onValue, set, update, get, runTransaction, push } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+  import { getDatabase, ref, onValue, set as _origSet, update as _origUpdate, get, runTransaction as _origRunTx, push } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
-  const cfg = {"apiKey": "AIzaSyB9QKf88f8YS3b8hQ_hbJC4rwre9UYNIUI", "authDomain": "mon421-a1108.firebaseapp.com", "databaseURL": "https://mon421-a1108-default-rtdb.europe-west1.firebasedatabase.app", "projectId": "mon421-a1108", "storageBucket": "mon421-a1108.appspot.com", "messagingSenderId": "354289081138", "appId": "1:354289081138:web:be104504732e1ef984952b"};
+  // ---- debug panel hooks
+  const logEl = document.querySelector('#dbgLog');
+  const btnClear = document.querySelector('#dbgClear');
+  const btnColl  = document.querySelector('#dbgCollapse');
+  let collapsed = false;
+  function addLine(level, ...args){
+    const time = new Date().toISOString().split('T')[1].replace('Z','');
+    const msg = args.map(a=>{ try{ return (typeof a==='object')?JSON.stringify(a):String(a);}catch{ return String(a);} }).join(' ');
+    logEl.textContent += `[${time}] ${level.toUpperCase()}: ${msg}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  btnClear.onclick=()=>{ logEl.textContent=''; };
+  btnColl.onclick=()=>{ collapsed=!collapsed; logEl.style.display=collapsed?'none':'block'; btnColl.textContent=collapsed?'Expand':'Collapse'; };
+  const con = console; console.log=(...a)=>{ addLine('log',...a); con.log(...a); }; console.warn=(...a)=>{ addLine('warn',...a); con.warn(...a); }; console.error=(...a)=>{ addLine('error',...a); con.error(...a); };
+  window.addEventListener('error',e=>addLine('onerror', e.message));
+  window.addEventListener('unhandledrejection',e=>addLine('promise', e.reason?.message||String(e.reason)));
+  console.log('Debug panel ready.');
+
+  // ---- Firebase config (yours)
+  const cfg = {"apiKey":"AIzaSyB9QKf88f8YS3b8hQ_hbJC4rwre9UYNIUI","authDomain":"mon421-a1108.firebaseapp.com","databaseURL":"https://mon421-a1108-default-rtdb.europe-west1.firebasedatabase.app","projectId":"mon421-a1108","storageBucket":"mon421-a1108.appspot.com","messagingSenderId":"354289081138","appId":"1:354289081138:web:be104504732e1ef984952b"};
   const app = initializeApp(cfg);
   const db = getDatabase(app);
+
+  // ---- wrap DB calls for logs
+  async function dbgRoom(tag){
+    try{
+      if(!roomId) return;
+      const s = await get(ref(db,'rooms/'+roomId));
+      const r = s.val()||{}; const seats = Object.keys(r.players||{}).filter(k=>r.players[k]?.id).map(n=>+n).sort((a,b)=>a-b);
+      const done = seats.map(i=>({i,name:r.players[i]?.name,done:!!r.players[i]?.done,rollsLeft:r.players[i]?.rollsLeft,last:r.players[i]?.lastRank?.label}));
+      console.log('STATE', tag||'', { round:r.round, current:r.current, started:r.started, gameOver:r.gameOver, firstRollsLimit:r.firstRollsLimit, seats, done });
+    }catch(e){ console.error('dbgRoom', e.message); }
+  }
+  async function set(){ const res = await _origSet.apply(null, arguments); console.log('PROMISE:set'); await dbgRoom('after set'); return res; }
+  async function update(){ const res = await _origUpdate.apply(null, arguments); console.log('PROMISE:update'); await dbgRoom('after update'); return res; }
+  async function runTransaction(){ const res = await _origRunTx.apply(null, arguments); console.log('PROMISE:tx', {committed:res.committed}); await dbgRoom('after tx'); return res; }
+
   const $ = s => document.querySelector(s);
-
-  const toast = $('#toast');
-  function notify(msg){ toast.textContent = msg; toast.style.display='block'; clearTimeout(notify._t); notify._t=setTimeout(()=>toast.style.display='none', 3500); }
-
-  const el = {
-    lobby: $('#lobby'), game: $('#game'), players: $('#players'), logCard: $('#logCard'),
+  const el = { lobby: $('#lobby'), game: $('#game'), players: $('#players'), logCard: $('#logCard'),
     displayName: $('#displayName'), roomInput: $('#roomInput'), startPoints: $('#startPoints'),
     createBtn: $('#createBtn'), joinBtn: $('#joinBtn'), startBtn: $('#startBtn'), leaveBtn: $('#leaveBtn'),
-    roomCode: $('#roomCode'), interBanner: $('#interBanner'),
-    currentPlayer: $('#currentPlayer'), rollsLeft: $('#rollsLeft'),
+    roomCode: $('#roomCode'), interBanner: $('#interBanner'), currentPlayer: $('#currentPlayer'), rollsLeft: $('#rollsLeft'),
     dice: $('#dice'), comboHint: $('#comboHint'), rollBtn: $('#rollBtn'), toggleAllBtn: $('#toggleAllBtn'), endTurnBtn: $('#endTurnBtn'),
-    log: $('#log'), overlay: $('#overlay'), winnerName: $('#winnerName'), replayBtn: $('#replayBtn')
-  };
+    log: $('#log'), overlay: $('#overlay'), winnerName: $('#winnerName'), replayBtn: $('#replayBtn') };
 
-  // Persistence
+  const toast = $('#toast'); function notify(msg){ toast.textContent=msg; toast.style.display='block'; clearTimeout(notify._t); notify._t=setTimeout(()=>toast.style.display='none', 3000); console.warn('TOAST', msg); }
+
+  // persistence
   let roomId = localStorage.getItem('r421_roomId') || null;
   let myId   = localStorage.getItem('r421_myId') || (Math.random().toString(36).slice(2,10));
   localStorage.setItem('r421_myId', myId);
-  let seat   = localStorage.getItem('r421_seat');
-  if (seat !== null) seat = parseInt(seat,10); else seat = null;
+  let seat   = localStorage.getItem('r421_seat'); seat = seat!==null?parseInt(seat,10):null;
 
-  function safePath(patches) {
-    if (!roomId) return null;
-    const out = {};
-    for (const k in patches) out[`rooms/${roomId}/${k}`] = patches[k];
-    return out;
-  }
-  async function safeUpdate(patches) { if (!roomId) return; await update(ref(db), safePath(patches)); }
-  async function appendLog(msg){ if (!roomId) return; try { await push(ref(db, `rooms/${roomId}/log`), { t: Date.now(), msg }); } catch(e){ notify('Log: '+e.message); } }
-
-  // Sounds
-  const AC = window.AudioContext||window.webkitAudioContext; const ctx = new AC();
-  function tone(f,d=0.12,t='sine',v=0.05){try{const o=ctx.createOscillator(),g=ctx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(ctx.destination);o.start();setTimeout(()=>o.stop(),d*1000);}catch(e){}}
-  function yourTurnSound(){ tone(880); setTimeout(()=>tone(1175),120); }
-
-  // Rules
   const sortAsc=a=>[...a].sort((x,y)=>x-y), sortDesc=a=>[...a].sort((x,y)=>y-x);
   const is421 = d => (sortDesc(d)[0]===4 && sortDesc(d)[1]===2 && sortDesc(d)[2]===1);
   const isBrelan = d => d[0]===d[1] && d[1]===d[2];
@@ -150,439 +161,95 @@
   const xOfPair = d => { const c={}; d.forEach(v=>c[v]=(c[v]||0)+1); for(const k in c) if(c[k]===1) return parseInt(k,10); return null; };
   const isSuite = d => ['123','234','345','456'].includes(sortAsc(d).join(''));
   const isPaire = d => new Set(d).size===2;
-  function rankHand(d){
-    const s=sortDesc(d);
-    if(is421(s)) return {order:7, label:'421', category:'421', meta:{}};
-    if(is111(s)) return {order:6, label:'1-1-1', category:'111', meta:{}};
-    if(is11x(s)) return {order:5, label:`1-1-${xOfPair(s)}`, category:'11x', meta:{x:xOfPair(s)}};
-    if(isBrelan(s)) return {order:4, label:`${s[0]}-${s[0]}-${s[0]}`, category:'Brelan', meta:{x:s[0]}};
-    if(isSuite(s)) return {order:3, label:sortAsc(s).join('-'), category:'Suite', meta:{}};
-    if(isPaire(s)) { let pair,k; if(s[0]===s[1]){pair=s[0];k=s[2];} else {pair=s[1];k=s[0];} return {order:2, label:`${pair}-${pair}-${k}`, category:'Paire', meta:{pair,k}}; }
-    return {order:1, label:`${s[0]}-${s[1]}-${s[2]}`, category:'Haute', meta:{}};
+  function rankHand(d){ const s=sortDesc(d);
+    if(is421(s)) return {order:7,label:'421',category:'421',meta:{}};
+    if(is111(s)) return {order:6,label:'1-1-1',category:'111',meta:{}};
+    if(is11x(s)) return {order:5,label:`1-1-${xOfPair(s)}`,category:'11x',meta:{x:xOfPair(s)}};
+    if(isBrelan(s)) return {order:4,label:`${s[0]}-${s[0]}-${s[0]}`,category:'Brelan',meta:{x:s[0]}};
+    if(isSuite(s)) return {order:3,label:sortAsc(s).join('-'),category:'Suite',meta:{}};
+    if(isPaire(s)) { let pair,k; if(s[0]===s[1]){pair=s[0];k=s[2];} else {pair=s[1];k=s[0];} return {order:2,label:`${pair}-${pair}-${k}`,category:'Paire',meta:{pair,k}}; }
+    return {order:1,label:`${s[0]}-${s[1]}-${s[2]}`,category:'Haute',meta:{}};
   }
-  function winnerPoints(rank){
-    switch(rank.category){
-      case '421': return 8;
-      case '111': return 7;
-      case '11x': return rank.meta?.x || 0;
-      case 'Brelan': return rank.meta?.x || 0;
-      case 'Suite': return 2;
-      case 'Paire': return 1;
-      case 'Haute': return 1;
-      default: return 0;
-    }
-  }
+  function winnerPoints(rank){ switch(rank.category){ case '421':return 8; case '111':return 7; case '11x':return rank.meta?.x||0; case 'Brelan':return rank.meta?.x||0; case 'Suite':return 2; case 'Paire':return 1; case 'Haute':return 1; default:return 0; } }
 
-  // Seats helpers
   const seatKeys = room => Object.keys(room.players||{}).map(k=>parseInt(k,10)).filter(n=>!Number.isNaN(n)).sort((a,b)=>a-b);
   const joinedSeats = room => seatKeys(room).filter(i=>room.players[i]?.id);
 
-  function setMiniDice(container, dice){
-    container.innerHTML='';
-    (dice||[1,1,1]).forEach(v=>{
-      const d=document.createElement('div'); d.className='d'; d.textContent=v; container.appendChild(d);
-    });
-  }
+  function setMiniDice(container, dice){ container.innerHTML=''; (dice||[1,1,1]).forEach(v=>{ const d=document.createElement('div'); d.className='d'; d.textContent=v; container.appendChild(d); }); }
+
+  function safePath(patches){ if(!roomId) return null; const out={}; for(const k in patches) out[`rooms/${roomId}/${k}`]=patches[k]; return out; }
+  async function safeUpdate(p){ if(!roomId) return; console.log('safeUpdate', p); await update(ref(db), safePath(p)); }
+  async function appendLog(msg){ if(!roomId) return; try{ await push(ref(db,`rooms/${roomId}/log`),{t:Date.now(),msg}); console.log('LOG+', msg);}catch(e){ console.error('log', e.message);} }
 
   // Lobby
   async function createRoom(){
     try{
       const code=($('#roomInput').value.trim()||Math.random().toString(36).slice(2,7)).toUpperCase();
       const startPts = Math.max(1, Math.min(99, parseInt($('#startPoints').value||'10',10)));
-      const init={ createdAt:Date.now(), started:false, locked:false, gameOver:false, startPoints:startPts,
-        current:0, round:1, firstRollsLimit:null, players:{}, log:[] };
+      const init={ createdAt:Date.now(), started:false, locked:false, gameOver:false, startPoints:startPts, current:0, round:1, firstRollsLimit:null, players:{}, log:[] };
       await set(ref(db,'rooms/'+code), init);
-      roomId=code; localStorage.setItem('r421_roomId', roomId);
+      roomId=code; localStorage.setItem('r421_roomId', roomId); console.log('ROOM CREATED', code);
       await joinRoom(code);
     }catch(e){ notify('Création: '+e.message); console.error(e); }
   }
 
   async function joinRoom(code){
     try{
-      code=(code||$('#roomInput').value.trim()).toUpperCase();
-      if(!code) return notify('Code manquant');
-      const snap=await get(ref(db,'rooms/'+code));
-      if(!snap.exists()) return notify('Salle introuvable.');
-      const room=snap.val();
-      if(room.started && room.locked){
-        let already=false;
-        for(const s of seatKeys(room)) if(room.players[s]?.id===myId) { already=true; break; }
-        if(!already) return notify('Partie en cours — rejoins avant le démarrage.');
-      }
-      // rejoin?
-      seat=null;
-      for(const s of seatKeys(room)){ if(room.players[s]?.id===myId){ seat=s; break; } }
-      // claim free seat (pre-start)
-      if(seat===null && !room.started){
-        let seatIdx=0; const taken=new Set(seatKeys(room)); while(taken.has(seatIdx)) seatIdx++;
-        const path = `rooms/${code}/players/${seatIdx}`;
-        const res = await runTransaction(ref(db, path), (cur)=>{
-          if(!cur || !cur.id) return {
-            id: myId, name: ($('#displayName').value.trim()||'Joueur'),
-            score: room.startPoints||10, dice:[1,1,1], roll:[true,true,true],
-            rollsLeft:3, done:false, lastRank:null, rollsUsed:0
-          };
-          return cur;
-        });
-        if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; }
-        if(seat!==null) await appendLog(`🟢 ${($('#displayName').value.trim()||'Joueur')} a rejoint (J${seat+1})`);
-      }
-      roomId=code; localStorage.setItem('r421_roomId', roomId);
-      if(seat!==null) localStorage.setItem('r421_seat', String(seat));
-      el.lobby.style.display='none'; el.game.style.display='block'; el.players.style.display='grid'; el.logCard.style.display='block'; el.roomCode.textContent=code;
+      code=(code||$('#roomInput').value.trim()).toUpperCase(); if(!code) return notify('Code manquant');
+      const snap=await get(ref(db,'rooms/'+code)); if(!snap.exists()) return notify('Salle introuvable.');
+      const room=snap.val(); if(room.started && room.locked){ let already=false; for(const s of seatKeys(room)) if(room.players[s]?.id===myId) { already=true; break; } if(!already) return notify('Partie en cours — rejoins avant le démarrage.'); }
+      seat=null; for(const s of seatKeys(room)){ if(room.players[s]?.id===myId){ seat=s; break; } }
+      if(seat===null && !room.started){ let seatIdx=0; const taken=new Set(seatKeys(room)); while(taken.has(seatIdx)) seatIdx++; const path=`rooms/${code}/players/${seatIdx}`; const res=await runTransaction(ref(db,path),(cur)=>{ if(!cur||!cur.id) return { id: myId, name: ($('#displayName').value.trim()||'Joueur'), score: room.startPoints||10, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 }; return cur; }); if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; console.log('SEAT CLAIMED', seat);} if(seat!==null) await appendLog(`🟢 ${($('#displayName').value.trim()||'Joueur')} a rejoint (J${seat+1})`); }
+      roomId=code; localStorage.setItem('r421_roomId', roomId); if(seat!==null) localStorage.setItem('r421_seat', String(seat));
+      el.lobby.style.display='none'; el.game.style.display='block'; el.players.style.display='grid'; el.logCard.style.display='block'; el.roomCode.textContent=code; console.log('JOINED ROOM', code, 'SEAT', seat);
       subscribe();
     }catch(e){ notify('Rejoindre: '+e.message); console.error(e); }
   }
 
-  async function releaseSeat() {
-    if (!roomId || seat==null) return;
-    const rs = await get(ref(db,'rooms/'+roomId)); if (!rs.exists()) return;
-    const room = rs.val();
-    if (!room.started) {
-      const leavingName = room.players?.[seat]?.name || 'Joueur';
-      await update(ref(db), {
-        [`rooms/${roomId}/players/${seat}`]: {
-          id: "", name: "—", score: room.startPoints||10,
-          dice:[1,1,1], roll:[true,true,true],
-          rollsLeft:3, done:false, lastRank:null, rollsUsed:0
-        }
-      });
-      await appendLog(`🚪 ${leavingName} a quitté (J${seat+1})`);
-    }
-  }
+  async function releaseSeat(){ if(!roomId||seat==null) return; const rs=await get(ref(db,'rooms/'+roomId)); if(!rs.exists()) return; const room=rs.val(); if(!room.started){ const leavingName = room.players?.[seat]?.name || 'Joueur'; await update(ref(db), { [`rooms/${roomId}/players/${seat}`]: { id:"", name:"—", score:room.startPoints||10, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 } }); await appendLog(`🚪 ${leavingName} a quitté (J${seat+1})`); } }
 
   el.createBtn.addEventListener('click', createRoom);
   el.joinBtn.addEventListener('click', ()=>joinRoom($('#roomInput').value));
-  el.leaveBtn.addEventListener('click', async ()=>{
-    try{ await releaseSeat(); }catch(e){}
-    localStorage.removeItem('r421_roomId');
-    localStorage.removeItem('r421_seat');
-    location.reload();
-  });
+  el.leaveBtn.addEventListener('click', async ()=>{ try{ await releaseSeat(); }catch(e){} localStorage.removeItem('r421_roomId'); localStorage.removeItem('r421_seat'); location.reload(); });
 
-  // Subscription + watchdog
-  let lastRoom = null, watchdogBusy = false;
-  function subscribe(){
-    onValue(ref(db,'rooms/'+roomId), (snap)=>{
-      if(!snap.exists()) return;
-      lastRoom = snap.val();
-      render(lastRoom);
-    });
-    setInterval(async()=>{
-      if (watchdogBusy || !lastRoom) return;
-      const seats = joinedSeats(lastRoom);
-      const allDone = lastRoom.started && !lastRoom.gameOver && seats.length>0 && seats.every(i=>lastRoom.players[i].done);
-      if (allDone) { watchdogBusy = true; try{ await settleTransaction(); } finally { watchdogBusy = false; } }
-    }, 1200);
-  }
+  // subscribe
+  let lastRoom=null, watchdogBusy=false;
+  function subscribe(){ onValue(ref(db,'rooms/'+roomId),(snap)=>{ if(!snap.exists()) return; lastRoom=snap.val(); render(lastRoom); }); setInterval(async()=>{ if(watchdogBusy||!lastRoom) return; const seats=joinedSeats(lastRoom); const allDone=lastRoom.started&&!lastRoom.gameOver&&seats.length>0&&seats.every(i=>lastRoom.players[i].done); if(allDone){ watchdogBusy=true; console.log('WATCHDOG settling'); try{ await settleTransaction(); } finally{ watchdogBusy=false; } } }, 1200); }
 
-  function renderPlayers(room){
-    const cont = el.players; cont.innerHTML = '';
-    seatKeys(room).forEach(i=>{
-      const p = room.players[i] || {};
-      const card = document.createElement('div');
-      card.className = 'card player' + (room.started && room.current===i && p.id && !p.done ? ' active' : '');
-      card.innerHTML = `
-        <div class="pill">J${i+1}</div>
-        <h2>${p.id ? (p.name||('Joueur '+(i+1))) : '— (vide)'}</h2>
-        <div class="small"><span>${p.score ?? '—'}</span> pts</div>
-        <div class="small">${p.lastRank ? (p.lastRank.label+' ('+p.lastRank.category+')') : '—'}</div>
-        <div class="mini" id="m${i}"></div>
-      `;
-      cont.appendChild(card);
-      setMiniDice(card.querySelector('#m'+i), p.dice);
-    });
-  }
+  function renderPlayers(room){ const cont=el.players; cont.innerHTML=''; seatKeys(room).forEach(i=>{ const p=room.players[i]||{}; const card=document.createElement('div'); card.className='card player'+(room.started&&room.current===i&&p.id&&!p.done?' active':''); card.innerHTML=`<div class="pill">J${i+1}</div><h2>${p.id?(p.name||('Joueur '+(i+1))):'— (vide)'}</h2><div class="small"><span>${p.score??'—'}</span> pts</div><div class="small">${p.lastRank?(p.lastRank.label+' ('+p.lastRank.category+')'):'—'}</div><div class="mini" id="m${i}"></div>`; cont.appendChild(card); setMiniDice(card.querySelector('#m'+i), p.dice); }); }
 
   function render(room){
-    el.log.innerHTML='';
-    const entries = room.log ? Object.values(room.log).sort((a,b)=>a.t-b.t) : [];
-    entries.forEach(e=>{ const p=document.createElement('p'); p.textContent=e.msg; el.log.appendChild(p); });
-
+    el.log.innerHTML=''; const entries=room.log?Object.values(room.log).sort((a,b)=>a.t-b.t):[]; entries.forEach(e=>{ const p=document.createElement('p'); p.textContent=e.msg; el.log.appendChild(p); });
     renderPlayers(room);
-
-    const seats = joinedSeats(room);
-    el.startBtn.disabled = room.started || seats.length < 2;
-    el.interBanner.textContent = room.started ? '' : `Joueurs prêts: ${seats.length} (min 2)`;
-
-    const me = (seat!=null && room.players[seat]) ? room.players[seat] : null;
-    const myTurn = !!(me && room.started && room.current===seat && !me.done);
-    el.currentPlayer.textContent = room.players[room.current]?.name || '—';
-    el.rollsLeft.textContent = me ? (me.rollsLeft ?? '—') : '—';
-
-    if(room.gameOver){
-      el.overlay.style.display='flex';
-      const w = room.winnerSeat!=null ? (room.players[room.winnerSeat]?.name || '—') : '—';
-      el.winnerName.textContent = w;
-    } else el.overlay.style.display='none';
-
-    el.dice.innerHTML='';
-    const dice = me ? (me.dice||[1,1,1]) : [1,1,1];
-    const firstRoll = me ? (me.rollsLeft===3) : false;
-    dice.forEach((v,i)=>{
-      const b=document.createElement('button');
-      b.className='die'+((me && me.roll && me.roll[i])?' roll':'');
-      b.innerHTML=`<span>${v}</span><small>${(me && me.roll && me.roll[i])?'à relancer':'gardé'}</small>`;
-      b.onclick=()=>{ if(firstRoll) return; toggleRoll(i); };
-      el.dice.appendChild(b);
-    });
-    if(firstRoll && me) safeUpdate({ ['players/'+seat+'/roll']:[true,true,true] });
-
-    const limit = room.firstRollsLimit;
-    const disableRoll = !myTurn || (me && me.rollsLeft<=0) || (limit!=null && (3-me.rollsLeft) >= limit);
-    el.toggleAllBtn.disabled = firstRoll || !myTurn;
-    el.rollBtn.disabled = disableRoll;
-    el.endTurnBtn.disabled = !myTurn;
-
-    if(myTurn) yourTurnSound();
-
-    const allDone = seats.length>0 && seats.every(i => room.players[i].done);
-    if (room.started && !room.gameOver && allDone) {
-      if (!render._settleScheduled) {
-        render._settleScheduled = true;
-        setTimeout(async () => { try { await settleTransaction(); } finally { render._settleScheduled = false; } }, 150);
-      }
-    }
+    const seats=joinedSeats(room); el.startBtn.disabled=room.started||seats.length<2; el.interBanner.textContent=room.started?'':`Joueurs prêts: ${seats.length} (min 2)`;
+    const me=(seat!=null&&room.players[seat])?room.players[seat]:null; const myTurn=!!(me&&room.started&&room.current===seat&&!me.done); el.currentPlayer.textContent=room.players[room.current]?.name||'—'; el.rollsLeft.textContent=me?(me.rollsLeft??'—'):'—';
+    if(room.gameOver){ el.overlay.style.display='flex'; const w=room.winnerSeat!=null?(room.players[room.winnerSeat]?.name||'—'):'—'; el.winnerName.textContent=w; } else el.overlay.style.display='none';
+    el.dice.innerHTML=''; const dice=me?(me.dice||[1,1,1]):[1,1,1]; const firstRoll=me?(me.rollsLeft===3):false; dice.forEach((v,i)=>{ const b=document.createElement('button'); b.className='die'+((me&&me.roll&&me.roll[i])?' roll':''); b.innerHTML=`<span>${v}</span><small>${(me&&me.roll&&me.roll[i])?'à relancer':'gardé'}</small>`; b.onclick=()=>{ if(firstRoll) return; toggleRoll(i); }; el.dice.appendChild(b); }); if(firstRoll&&me) safeUpdate({ [`players/${seat}/roll`]:[true,true,true] });
+    const limit=room.firstRollsLimit; const used=me?(3-me.rollsLeft):0; const overLimit=(limit!=null&&used>=limit);
+    el.toggleAllBtn.disabled=(!myTurn||firstRoll); el.rollBtn.disabled=(!myTurn||me?.done||overLimit||(me&&me.rollsLeft<=0)); el.endTurnBtn.disabled=(!myTurn||me?.done);
+    const allDone=seats.length>0&&seats.every(i=>room.players[i].done); console.log('RENDER allDone?', allDone, 'seats', seats);
+    if(room.started&&!room.gameOver&&allDone){ if(!render._settleScheduled){ render._settleScheduled=true; console.log('RENDER schedule settle'); setTimeout(async()=>{ try{ await settleTransaction(); } finally{ render._settleScheduled=false; } },150); } }
   }
 
-  async function toggleRoll(i){
-    const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const me=room.players[seat];
-    if(!room.started || room.current!==seat || me.done) return;
-    if(me.rollsLeft===3) return;
-    const roll=me.roll.slice(); roll[i]=!roll[i];
-    await safeUpdate({ ['players/'+seat+'/roll']: roll });
+  async function toggleRoll(i){ const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const me=room.players[seat]; if(!room.started||room.current!==seat||me.done) return; if(me.rollsLeft===3) return; const roll=me.roll.slice(); roll[i]=!roll[i]; await safeUpdate({ [`players/${seat}/roll`]: roll }); console.log('TOGGLE ROLL', i, roll);
   }
 
-  async function startGame(){
-    const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
-    const seats=joinedSeats(room);
-    if(seats.length<2) return notify('Il faut au moins 2 joueurs.');
-    const updates={};
-    seats.forEach(i=>{
-      const p=room.players[i];
-      updates['players/'+i] = { ...p, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 };
-    });
-    updates['current'] = seats[0];
-    updates['round'] = 1;
-    updates['started'] = true;
-    updates['locked'] = true;
-    updates['gameOver'] = false;
-    updates['firstRollsLimit'] = null;
-    await safeUpdate(updates);
-    await appendLog(`🚀 Partie démarrée (joueurs: ${seats.length})`);
-  }
+  async function startGame(){ const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const seats=joinedSeats(room); if(seats.length<2) return notify('Il faut au moins 2 joueurs.'); const updates={}; seats.forEach(i=>{ const p=room.players[i]; updates['players/'+i] = { ...p, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 }; }); updates['current']=seats[0]; updates['round']=1; updates['started']=true; updates['locked']=true; updates['gameOver']=false; updates['firstRollsLimit']=null; await safeUpdate(updates); await appendLog(`🚀 Partie démarrée (joueurs: ${seats.length})`); console.log('GAME STARTED'); }
   el.startBtn.addEventListener('click', startGame);
 
-  async function rollSelected(){
-    const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const me=room.players[seat];
-    if(!room.started || room.current!==seat || me.done || me.rollsLeft<=0) return;
-    const limit = room.firstRollsLimit;
-    const used = 3 - me.rollsLeft;
-    if (limit!=null && used >= limit) return;
-
-    const dice=me.dice.slice();
-    const toRoll=me.roll.map((x,idx)=>x?idx:null).filter(x=>x!==null);
-    const final={}; toRoll.forEach(i=>final[i]= (1+Math.floor(Math.random()*6)));
-    for(const i of toRoll){
-      const steps = 10 + Math.floor(Math.random()*6);
-      for(let t=0;t<steps;t++){ dice[i] = 1+Math.floor(Math.random()*6); const btn = el.dice.children[i]; if(btn) btn.querySelector('span').textContent = dice[i]; await new Promise(r=>setTimeout(r, 40)); }
-      dice[i] = final[i]; const btn = el.dice.children[i]; if(btn) btn.querySelector('span').textContent = dice[i]; await new Promise(r=>setTimeout(r, 100));
-    }
-    const r=rankHand(dice);
-    await safeUpdate({
-      ['players/'+seat+'/dice']:dice,
-      ['players/'+seat+'/lastRank']:r,
-      ['players/'+seat+'/rollsLeft']:me.rollsLeft-1,
-      ['players/'+seat+'/rollsUsed']:(me.rollsUsed||0)+1
-    });
-  }
+  async function rollSelected(){ const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const me=room.players[seat]; if(!room.started||room.current!==seat||me.done||me.rollsLeft<=0) return; const limit=room.firstRollsLimit; const used=3-me.rollsLeft; if(limit!=null&&used>=limit) return; const dice=me.dice.slice(); const toRoll=me.roll.map((x,idx)=>x?idx:null).filter(x=>x!==null); const final={}; toRoll.forEach(i=>final[i]=(1+Math.floor(Math.random()*6))); for(const i of toRoll){ const steps=10+Math.floor(Math.random()*6); for(let t=0;t<steps;t++){ dice[i]=1+Math.floor(Math.random()*6); const btn=el.dice.children[i]; if(btn) btn.querySelector('span').textContent=dice[i]; await new Promise(r=>setTimeout(r,40)); } dice[i]=final[i]; const btn=el.dice.children[i]; if(btn) btn.querySelector('span').textContent=dice[i]; await new Promise(r=>setTimeout(r,100)); } const r=rankHand(dice); await safeUpdate({ [`players/${seat}/dice`]:dice, [`players/${seat}/lastRank`]:r, [`players/${seat}/rollsLeft`]:me.rollsLeft-1, [`players/${seat}/rollsUsed`]:(me.rollsUsed||0)+1 }); console.log('ROLLED', dice, r); }
   el.rollBtn.addEventListener('click', rollSelected);
 
-  async function endTurn(){
-  if (!roomId) return;
-  // snapshot
-  const rs = await get(ref(db,'rooms/'+roomId));
-  let room = rs.val();
-  const me = room.players[seat];
-  if(!room.started || room.current!==seat || me.done) return;
-
-  // first roll must happen (prevents cheating and guarantees a rank)
-  if(me.rollsLeft===3) await rollSelected();
-
-  // ensure rank exists
-  const meNow = (await get(ref(db, `rooms/${roomId}/players/${seat}`))).val();
-  if(!meNow.lastRank){
-    const r=rankHand(meNow.dice);
-    await safeUpdate({ [`players/${seat}/lastRank`]: r });
-  }
-
-  // mark done & freeze dice
-  await safeUpdate({
-    [`players/${seat}/done`]: true,
-    [`players/${seat}/roll`]: [false,false,false]
-  });
-
-
-console.log('ENDTURN: marked done for seat', seat);
-await dbgRoom();
-
-
-  // set the round roll limit from the first finisher
-  room = (await get(ref(db,'rooms/'+roomId))).val();
-  const used = meNow.rollsUsed || (3 - meNow.rollsLeft);
-  if(room.firstRollsLimit==null){
-    await safeUpdate({ firstRollsLimit: used });
-    await appendLog(`🎯 Limite de lancers ce tour: ${used} (par ${meNow.name||'Joueur'})`);
-  }
-
-  // advance or settle
-  room = (await get(ref(db,'rooms/'+roomId))).val();
-  const seats = Object.keys(room.players).map(n=>+n).filter(n=>room.players[n]?.id).sort((a,b)=>a-b);
-  const remaining = seats.filter(i => !room.players[i].done);
-
-  if(remaining.length>0){
-    const idx = seats.indexOf(room.current);
-    let next = room.current;
-    for(let k=1;k<=seats.length;k++){
-      const cand = seats[(idx+k)%seats.length];
-      if(!room.players[cand].done){ next=cand; break; }
-    }
-    await safeUpdate({ current: next });
-    await appendLog(`⏭️ Tour à ${room.players[next]?.name||('J'+(next+1))}`);
-  }else{
-    await settleTransaction();
-  }
-}
+  async function endTurn(){ const rs=await get(ref(db,'rooms/'+roomId)); let room=rs.val(); const me=room.players[seat]; if(!room.started||room.current!==seat||me.done) return; if(me.rollsLeft===3) await rollSelected(); const me2=(await get(ref(db,`rooms/${roomId}/players/${seat}`))).val(); if(!me2.lastRank){ const r=rankHand(me2.dice); await safeUpdate({ [`players/${seat}/lastRank`]: r }); }
+    await safeUpdate({ [`players/${seat}/done`]:true, [`players/${seat}/roll`]:[false,false,false] }); console.log('ENDTURN done seat', seat);
+    const used=me2.rollsUsed||(3-me2.rollsLeft); const limit=room.firstRollsLimit; if(limit==null){ await safeUpdate({ firstRollsLimit: used }); await appendLog(`🎯 Limite de lancers ce tour: ${used} (par ${me2.name||'Joueur'})`); }
+    room=(await get(ref(db,'rooms/'+roomId))).val(); const seats=joinedSeats(room); const remaining=seats.filter(i=>!room.players[i].done); if(remaining.length>0){ const idx=seats.indexOf(room.current); let next=room.current; for(let k=1;k<=seats.length;k++){ const cand=seats[(idx+k)%seats.length]; if(!room.players[cand].done){ next=cand; break; } } await safeUpdate({ current: next }); await appendLog(`⏭️ Tour à ${room.players[next]?.name||('J'+(next+1))}`); } else { await settleTransaction(); } }
   el.endTurnBtn.addEventListener('click', endTurn);
 
-  async function settleTransaction(){
-    await runTransaction(ref(db,'rooms/'+roomId), (room)=>{
-      if(!room) return room;
-      const seats = joinedSeats(room);
-      if(seats.length<2) return room;
+  async function settleTransaction(){ await runTransaction(ref(db,'rooms/'+roomId),(room)=>{ if(!room) return room; const seats=joinedSeats(room); if(seats.length<2) return room; const rankOf=i=>(room.players[i].lastRank||rankHand(room.players[i].dice)); const ranked=seats.map(i=>({i,r:rankOf(i)})).sort((a,b)=>a.r.order-b.r.order).reverse(); const top=ranked[0].r.order; const bot=ranked[ranked.length-1].r.order; const bestSeats=ranked.filter(x=>x.r.order===top).map(x=>x.i); const worstSeats=ranked.filter(x=>x.r.order===bot).map(x=>x.i); const bestSeat=bestSeats[0]; const worstSeat=worstSeats[0]; const winnerRank=rankOf(bestSeat); const amount=winnerPoints(winnerRank); if(amount>0&&bestSeat!=null&&worstSeat!=null){ const before=room.players[bestSeat].score|0; const paid=Math.min(before,amount); room.players[bestSeat].score=before-paid; room.players[worstSeat].score=(room.players[worstSeat].score||0)+paid; room.lastTransfer={ payer:bestSeat, payee:worstSeat, amount:paid, combo:winnerRank.label }; }
+      let winnerSeat=null; for(const i of seats) if((room.players[i].score|0)===0){ winnerSeat=i; break; } if(winnerSeat!=null){ room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat; room.lastSettle=Date.now(); return room; }
+      const nextStarter=worstSeats[0]; room.round=(room.round||1)+1; room.current=nextStarter; room.firstRollsLimit=null; seats.forEach(i=>{ const p=room.players[i]; room.players[i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0}; }); room.lastSettle=Date.now(); return room; }); const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); if(room.lastTransfer){ const p=room.players[room.lastTransfer.payer]?.name||'Joueur'; const q=room.players[room.lastTransfer.payee]?.name||'Joueur'; await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`); await safeUpdate({ lastTransfer: null }); } console.log('SETTLED'); }
 
-      const rankOf = (i)=> (room.players[i].lastRank || rankHand(room.players[i].dice));
-      const ranked = seats.map(i=>({i, r:rankOf(i)})).sort((a,b)=>a.r.order-b.r.order).reverse();
-
-      const top = ranked[0].r.order;
-      const bot = ranked[ranked.length-1].r.order;
-      const bestSeats  = ranked.filter(x=>x.r.order===top).map(x=>x.i);
-      const worstSeats = ranked.filter(x=>x.r.order===bot).map(x=>x.i);
-
-      const bestSeat  = bestSeats[0];
-      const worstSeat = worstSeats[0];
-      const winnerRank = rankOf(bestSeat);
-      const amount = winnerPoints(winnerRank);
-
-      if(amount>0 && bestSeat!=null && worstSeat!=null){
-        const before = room.players[bestSeat].score|0;
-        const paid = Math.min(before, amount);
-        room.players[bestSeat].score = before - paid;
-        room.players[worstSeat].score = (room.players[worstSeat].score||0) + paid;
-        room.lastTransfer = { payer: bestSeat, payee: worstSeat, amount: paid, combo: winnerRank.label };
-      }
-
-      let winnerSeat=null;
-      for(const i of seats) if((room.players[i].score|0)===0) { winnerSeat=i; break; }
-      if(winnerSeat!=null){
-        room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat;
-        room.lastSettle = Date.now();
-        return room;
-      }
-
-      const nextStarter = worstSeats[0];
-      room.round = (room.round||1)+1;
-      room.current = nextStarter;
-      room.firstRollsLimit = null;
-      seats.forEach(i=>{
-        const p=room.players[i];
-        room.players[i] = { ...p, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 };
-      });
-
-      room.lastSettle = Date.now();
-      return room;
-    });
-
-    const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
-    if(room.lastTransfer){
-      const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
-      const q=room.players[room.lastTransfer.payee]?.name||'Joueur';
-      await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`);
-      await safeUpdate({ lastTransfer: null });
-    }
-  }
-
-  el.replayBtn.addEventListener('click', async ()=>{
-    const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val();
-    const seats=joinedSeats(room);
-    const upd={};
-    seats.forEach(i=>{
-      const base=room.startPoints||10; const p=room.players[i];
-      upd['players/'+i]={...p, score:base, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0};
-    });
-    upd['gameOver']=false; upd['winnerSeat']=null; upd['started']=false; upd['firstRollsLimit']=null;
-    await safeUpdate(upd);
-  });
-
-/* ---- MOBILE DEBUG CONSOLE (drop-in) ---- */
-(function(){
-  const panel = document.createElement('div');
-  panel.id='dbgPanel';
-  panel.style.cssText='position:fixed;left:8px;right:8px;bottom:10px;max-height:40vh;overflow:auto;background:#0b1220;border:1px solid #334155;border-radius:10px;font:12px/1.3 system-ui;padding:8px;z-index:9999;color:#e5e7eb';
-  panel.innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-      <strong style="font-size:12px;">🔧 Debug</strong>
-      <button id="dbgClear" style="margin-left:auto;background:#111827;border:1px solid #334155;border-radius:8px;padding:4px 8px;color:#e5e7eb">Clear</button>
-      <button id="dbgCollapse" style="background:#111827;border:1px solid #334155;border-radius:8px;padding:4px 8px;color:#e5e7eb">Collapse</button>
-    </div>
-    <pre id="dbgLog" style="white-space:pre-wrap;margin:0;overflow-wrap:anywhere;"></pre>
-  `;
-  document.body.appendChild(panel);
-  const logEl = panel.querySelector('#dbgLog');
-  const btnClear = panel.querySelector('#dbgClear');
-  const btnColl  = panel.querySelector('#dbgCollapse');
-  let collapsed = false;
-
-  function addLine(level, args){
-    const time = new Date().toISOString().split('T')[1].replace('Z','');
-    const msg = Array.from(args).map(a=>{
-      try {
-        return (typeof a==='object') ? JSON.stringify(a) : String(a);
-      } catch { return String(a); }
-    }).join(' ');
-    logEl.textContent += `[${time}] ${level.toUpperCase()}: ${msg}\n`;
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  btnClear.onclick = ()=>{ logEl.textContent=''; };
-  btnColl.onclick = ()=>{
-    collapsed = !collapsed;
-    logEl.style.display = collapsed ? 'none':'block';
-    btnColl.textContent = collapsed ? 'Expand':'Collapse';
-  };
-
-  // Hook console
-  const _log = console.log, _warn = console.warn, _err = console.error;
-  console.log = (...a)=>{ addLine('log', a); _log.apply(console,a); };
-  console.warn = (...a)=>{ addLine('warn', a); _warn.apply(console,a); };
-  console.error = (...a)=>{ addLine('error', a); _err.apply(console,a); };
-
-  // Hook errors
-  window.addEventListener('error', (e)=>{
-    addLine('window.onerror', [e.message, e.filename+':'+e.lineno+':'+e.colno]);
-  });
-  window.addEventListener('unhandledrejection', (e)=>{
-    addLine('promise', [e.reason && e.reason.message ? e.reason.message : String(e.reason)]);
-  });
-
-  // Helper for your code
-  window.dbg = (...a)=>console.log('[DBG]', ...a);
-
-  // Initial marker
-  console.log('Debug panel ready. UA=', navigator.userAgent);
-})();
-
-
-</script>
-</body>
+  el.replayBtn.addEventListener('click', async ()=>{ const rs=await get(ref(db,'rooms/'+roomId)); const room=rs.val(); const seats=joinedSeats(room); const upd={}; seats.forEach(i=>{ const base=room.startPoints||10; const p=room.players[i]; upd['players/'+i]={...p, score:base, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0}; }); upd['gameOver']=false; upd['winnerSeat']=null; upd['started']=false; upd['firstRollsLimit']=null; await safeUpdate(upd); console.log('REPLAY RESET'); });
+</script></body>
 </html>
