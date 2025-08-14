@@ -398,28 +398,55 @@
   el.rollBtn.addEventListener('click', rollSelected);
 
   async function endTurn(){
-    const rs=await get(ref(db,'rooms/'+roomId)); let room=rs.val(); const me=room.players[seat];
-    if(!room.started || room.current!==seat || me.done) return;
-    if(me.rollsLeft===3) await rollSelected();
-    const me2 = (await get(ref(db,'rooms/'+roomId+'/players/'+seat))).val();
-    if(!me2.lastRank){ const r=rankHand(me2.dice); await safeUpdate({ ['players/'+seat+'/lastRank']: r }); }
-    await safeUpdate({ ['players/'+seat+'/done']:true, ['players/'+seat+'/roll']:[false,false,false] });
+  if (!roomId) return;
+  // snapshot
+  const rs = await get(ref(db,'rooms/'+roomId));
+  let room = rs.val();
+  const me = room.players[seat];
+  if(!room.started || room.current!==seat || me.done) return;
 
-    const used = me2.rollsUsed || (3 - me2.rollsLeft);
-    const limit = room.firstRollsLimit;
-    if(limit==null){ await safeUpdate({ firstRollsLimit: used }); await appendLog(`🎯 Limite de lancers ce tour: ${used} (par ${me2.name||'Joueur'})`); }
+  // first roll must happen (prevents cheating and guarantees a rank)
+  if(me.rollsLeft===3) await rollSelected();
 
-    room = (await get(ref(db,'rooms/'+roomId))).val();
-    const seats=joinedSeats(room);
-    const remaining = seats.filter(i=>!room.players[i].done);
-    if(remaining.length>0){
-      const idx = seats.indexOf(room.current); let next = room.current;
-      for(let k=1;k<=seats.length;k++){ next = seats[(idx+k)%seats.length]; if(!room.players[next].done) break; }
-      await safeUpdate({ current: next });
-    } else {
-      await settleTransaction();
-    }
+  // ensure rank exists
+  const meNow = (await get(ref(db, `rooms/${roomId}/players/${seat}`))).val();
+  if(!meNow.lastRank){
+    const r=rankHand(meNow.dice);
+    await safeUpdate({ [`players/${seat}/lastRank`]: r });
   }
+
+  // mark done & freeze dice
+  await safeUpdate({
+    [`players/${seat}/done`]: true,
+    [`players/${seat}/roll`]: [false,false,false]
+  });
+
+  // set the round roll limit from the first finisher
+  room = (await get(ref(db,'rooms/'+roomId))).val();
+  const used = meNow.rollsUsed || (3 - meNow.rollsLeft);
+  if(room.firstRollsLimit==null){
+    await safeUpdate({ firstRollsLimit: used });
+    await appendLog(`🎯 Limite de lancers ce tour: ${used} (par ${meNow.name||'Joueur'})`);
+  }
+
+  // advance or settle
+  room = (await get(ref(db,'rooms/'+roomId))).val();
+  const seats = Object.keys(room.players).map(n=>+n).filter(n=>room.players[n]?.id).sort((a,b)=>a-b);
+  const remaining = seats.filter(i => !room.players[i].done);
+
+  if(remaining.length>0){
+    const idx = seats.indexOf(room.current);
+    let next = room.current;
+    for(let k=1;k<=seats.length;k++){
+      const cand = seats[(idx+k)%seats.length];
+      if(!room.players[cand].done){ next=cand; break; }
+    }
+    await safeUpdate({ current: next });
+    await appendLog(`⏭️ Tour à ${room.players[next]?.name||('J'+(next+1))}`);
+  }else{
+    await settleTransaction();
+  }
+}
   el.endTurnBtn.addEventListener('click', endTurn);
 
   async function settleTransaction(){
