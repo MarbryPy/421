@@ -39,7 +39,7 @@
   #dbgPanel { position:fixed; left:8px; right:8px; bottom:10px; max-height:40vh; overflow:auto; background:#0b1220; border:1px solid #334155; border-radius:10px; font:12px/1.3 system-ui; padding:8px; z-index:9999; color:#e5e7eb }
   #dbgPanel pre{white-space:pre-wrap;margin:0;overflow-wrap:anywhere}
   #dbgPanel button{background:#111827;border:1px solid #334155;border-radius:8px;padding:4px 8px;color:#e5e7eb}
-  .rolling { pointer-events:none; }
+  .rolling { pointer-events:none; } /* bloque les clics pendant l’anim sans figer les boutons */
 </style>
 </head>
 <body>
@@ -183,15 +183,13 @@ let roomId=localStorage.getItem('r421_roomId')||null;
 let myId=localStorage.getItem('r421_myId')||(Math.random().toString(36).slice(2,10));
 localStorage.setItem('r421_myId',myId);
 let seat=localStorage.getItem('r421_seat'); seat=seat!==null?parseInt(seat,10):null;
-let lastLogTs = 0; // for incremental log rendering
+let lastLogTs = 0;
 let isRolling = false;
 
 /* ===== crypto RNG ===== */
 function rand32(){ const a=new Uint32Array(1); crypto.getRandomValues(a); return a[0]; }
 function d6(){ return (rand32()%6)+1; }
-function randInt(min,max){ // inclusive
-  const span=max-min+1; return min + (rand32()%span);
-}
+function randInt(min,max){ const span=max-min+1; return min + (rand32()%span); }
 
 /* ===== rules ===== */
 const sortAsc=a=>[...a].sort((x,y)=>x-y), sortDesc=a=>[...a].sort((x,y)=>y-x);
@@ -279,7 +277,6 @@ async function joinRoom(code){
       });
       if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; console.log('SEAT CLAIMED', seat); }
       if(seat!==null) await appendLog(`🟢 ${($('#displayName').value.trim()||'Joueur')} a rejoint (J${seat+1})`);
-      // presence marker
       try{
         db.ref(`rooms/${code}/players/${seat}`).onDisconnect().update({ online:false, away:true, lastSeen:Date.now() });
       }catch{}
@@ -385,9 +382,11 @@ function render(room){
   if(firstRoll&&me&&!(me.roll && me.roll.every(Boolean))) safeUpdate({[`players/${seat}/roll`]:[true,true,true]});
 
   const limit=room.firstRollsLimit; const used=me?(3-me.rollsLeft):0; const overLimit=(limit!=null&&used>=limit);
-  el.toggleAllBtn.disabled=(!myTurn||firstRoll||isRolling);
-  el.rollBtn.disabled=(!myTurn||me?.done||overLimit||(me&&me.rollsLeft<=0)||isRolling);
-  el.endTurnBtn.disabled=(!myTurn||me?.done||isRolling);
+  // important: on ne dépend plus de isRolling pour disabled
+  el.toggleAllBtn.disabled = (!myTurn || firstRoll);
+  el.rollBtn.disabled      = (!myTurn || me?.done || overLimit || (me && me.rollsLeft<=0));
+  el.endTurnBtn.disabled   = (!myTurn || me?.done);
+
   if(room.gameOver){
     el.overlay.style.display='flex';
     const w=room.winnerSeat!=null?(room.players[room.winnerSeat]?.name||'—'):'—';
@@ -463,49 +462,65 @@ async function endTurn(){
 }
 el.endTurnBtn.addEventListener('click',()=>{ try{ endTurn(); }catch(e){ notify('Erreur fin de tour'); } });
 
+/* ===== Règlement sécurisé ===== */
 async function settleTransaction(){
-  // single-flight using TX on the whole room and a 'settling' gate
-  const res = await TX('rooms/'+roomId,(room)=>{
-    if(!room) return room;
-    if(room.settling) return room;  // someone else is settling
-    const seats=joinedSeats(room); if(seats.length<2) return room;
-    room.settling = true;
+  // 1) lock sur 'settling' pour single-flight
+  const lock = await TX(`rooms/${roomId}/settling`, v => (v ? v : true));
+  if (!lock.committed || lock.snapshot.val() !== true) return; // quelqu’un règle déjà
 
-    const rankOf=i=>(room.players[i].lastRank||rankHand(room.players[i].dice));
-    const ranked=seats.map(i=>({i,r:rankOf(i)})).sort((a,b)=> (b.r.order-a.r.order) || (b.r.score-a.r.score));
-    const top=ranked[0].r; const bot=ranked[ranked.length-1].r;
-    const bestSeat=ranked[0].i, worstSeat=ranked[ranked.length-1].i;
+  try{
+    const res = await TX('rooms/'+roomId,(room)=>{
+      if(!room) return room;
 
-    const amount=winnerPoints(top);
-    if(amount>0&&bestSeat!=null&&worstSeat!=null){
-      const before=room.players[bestSeat].score|0;
-      const paid=Math.min(before,amount); // best hand pays
-      room.players[bestSeat].score=before-paid;
-      room.players[worstSeat].score=(room.players[worstSeat].score||0)+paid;
-      room.lastTransfer={payer:bestSeat,payee:worstSeat,amount:paid,combo:top.label};
-    }
+      // 2) recheck atomique: tous done ?
+      const seats = Object.keys(room.players||{}).map(Number).filter(n=>!Number.isNaN(n)).filter(i=>room.players[i]?.id);
+      if (seats.length<2) return room;
+      const allDone = seats.every(i => room.players[i]?.done === true);
+      if (!allDone) return room; // ne rien faire si pas tous terminés
 
-    let winnerSeat=null; for(const i of seats) if((room.players[i].score|0)===0){winnerSeat=i;break;}
-    if(winnerSeat!=null){
-      room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat; room.lastSettle=Date.now(); room.settling=false;
+      const rankOf=i=>(room.players[i].lastRank||rankHand(room.players[i].dice));
+      const ranked=seats.map(i=>({i,r:rankOf(i)}))
+                        .sort((a,b)=> (b.r.order-a.r.order) || (b.r.score-a.r.score));
+      const bestSeat=ranked[0].i, worstSeat=ranked[ranked.length-1].i;
+      const top=ranked[0].r;
+      const amount=winnerPoints(top); // best hand paie
+
+      if(amount>0&&bestSeat!=null&&worstSeat!=null){
+        const before=room.players[bestSeat].score|0;
+        const paid=Math.min(before,amount);
+        room.players[bestSeat].score=before-paid;
+        room.players[worstSeat].score=(room.players[worstSeat].score||0)+paid;
+        room.lastTransfer={payer:bestSeat,payee:worstSeat,amount:paid,combo:top.label};
+      }
+
+      // victoire ?
+      let winnerSeat=null; for(const i of seats) if((room.players[i].score|0)===0){winnerSeat=i;break;}
+      if(winnerSeat!=null){
+        room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat; room.lastSettle=Date.now();
+        return room;
+      }
+
+      // prochaine manche: pire main commence
+      room.round=(room.round||1)+1; room.current=worstSeat; room.firstRollsLimit=null;
+      seats.forEach(i=>{const p=room.players[i]; room.players[i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0};});
+      room.lastSettle=Date.now();
       return room;
-    }
-    // next round: worst starts
-    room.round=(room.round||1)+1; room.current=worstSeat; room.firstRollsLimit=null;
-    seats.forEach(i=>{const p=room.players[i]; room.players[i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0};});
-    room.lastSettle=Date.now(); room.settling=false;
-    return room;
-  });
+    });
 
-  // only the committing client logs transfer
-  const rs=await GET('rooms/'+roomId); const room=rs.val();
-  if(res.committed && room.lastTransfer){
-    const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
-    const q=room.players[room.lastTransfer.payee]?.name||'Joueur';
-    await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`);
-    await safeUpdate({lastTransfer:null});
+    // 3) log unique si un transfert a eu lieu
+    const rs=await GET('rooms/'+roomId); const room=rs.val();
+    if(res.committed && room.lastTransfer){
+      const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
+      const q=room.players[room.lastTransfer.payee]?.name||'Joueur';
+      await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`);
+      await safeUpdate({lastTransfer:null});
+    }
+  } finally {
+    // 4) libère le lock
+    await UPDATE({[`rooms/${roomId}/settling`]: false});
   }
 }
+
 el.replayBtn.addEventListener('click',async()=>{
   const rs=await GET('rooms/'+roomId); const room=rs.val(); const seats=joinedSeats(room); const upd={};
   seats.forEach(i=>{const base=room.startPoints||10; const p=room.players[i]; upd['players/'+i]={...p,score:base,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0,away:false,online:true};});
@@ -515,3 +530,4 @@ el.replayBtn.addEventListener('click',async()=>{
 </script>
 </body>
 </html>
+
