@@ -410,6 +410,15 @@ el.replayBtn.addEventListener('click',async()=>{
   await safeUpdate(upd);
 });
 </script>
+<div id="toast" class="toast"></div>
+<div id="dbgPanel">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+    <strong style="font-size:12px;">🔧 Debug</strong>
+    <button id="dbgClear" style="margin-left:auto;">Clear</button>
+    <button id="dbgCollapse">Collapse</button>
+  </div>
+  <pre id="dbgLog"></pre>
+</div>
 </body>
 </html>
 
