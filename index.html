@@ -1,3 +1,5 @@
+Here’s a cleaned, drop-in replacement for your index.html that implements “best hand pays, first to zero wins,” fixes dupes, adds CSPRNG dice, deterministic tie-breaks, guards first-roll spam, debounces settle with a settling flag, and hardens the roll UI.
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -39,6 +41,7 @@
   #dbgPanel { position:fixed; left:8px; right:8px; bottom:10px; max-height:40vh; overflow:auto; background:#0b1220; border:1px solid #334155; border-radius:10px; font:12px/1.3 system-ui; padding:8px; z-index:9999; color:#e5e7eb }
   #dbgPanel pre{white-space:pre-wrap;margin:0;overflow-wrap:anywhere}
   #dbgPanel button{background:#111827;border:1px solid #334155;border-radius:8px;padding:4px 8px;color:#e5e7eb}
+  .rolling { pointer-events:none; }
 </style>
 </head>
 <body>
@@ -115,10 +118,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
 
-<!-- Firebase compat (NO modules) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-
 <script>
 /* ===== Firebase init (compat) ===== */
 const cfg = {
@@ -141,7 +140,7 @@ const GET    = (path)           => db.ref(path).get();
 const ON     = (path, cb)       => db.ref(path).on('value', s => cb({exists:()=>s.exists(), val:()=>s.val()}));
 const PUSH   = (path, val)      => db.ref(path).push(val);
 
-/* ===== SAFE logger & toast (won’t crash if panel missing) ===== */
+/* ===== SAFE logger & toast ===== */
 (() => {
   const logEl = document.querySelector('#dbgLog');
   const btnClear = document.querySelector('#dbgClear');
@@ -186,26 +185,42 @@ let roomId=localStorage.getItem('r421_roomId')||null;
 let myId=localStorage.getItem('r421_myId')||(Math.random().toString(36).slice(2,10));
 localStorage.setItem('r421_myId',myId);
 let seat=localStorage.getItem('r421_seat'); seat=seat!==null?parseInt(seat,10):null;
+let lastLogTs = 0; // for incremental log rendering
+let isRolling = false;
+
+/* ===== crypto RNG ===== */
+function rand32(){ const a=new Uint32Array(1); crypto.getRandomValues(a); return a[0]; }
+function d6(){ return (rand32()%6)+1; }
+function randInt(min,max){ // inclusive
+  const span=max-min+1; return min + (rand32()%span);
+}
 
 /* ===== rules ===== */
 const sortAsc=a=>[...a].sort((x,y)=>x-y), sortDesc=a=>[...a].sort((x,y)=>y-x);
-const is421=d=>(sortDesc(d)[0]===4&&sortDesc(d)[1]===2&&sortDesc(d)[2]===1);
-const isBrelan=d=>d[0]===d[1]&&d[1]===d[2];
-const is111=d=>d[0]===1&&d[1]===1&&d[2]===1;
-const is11x=d=>sortDesc(d)[0]!==1&&((d[0]===1&&d[1]===1)||(d[0]===1&&d[2]===1)||(d[1]===1&&d[2]===1));
+const is421=d=>{const s=sortDesc(d); return s[0]===4&&s[1]===2&&s[2]===1;};
+const isBrelan=d=>{const s=sortDesc(d); return s[0]===s[1]&&s[1]===s[2];};
+const is111=d=>{const s=sortDesc(d); return s[0]===1&&s[1]===1&&s[2]===1;};
+const is11x=d=>{const s=sortDesc(d); return s[0]!==1 && ((s[0]===1&&s[1]===1)||(s[0]===1&&s[2]===1)||(s[1]===1&&s[2]===1));};
 const xOfPair=d=>{const c={};d.forEach(v=>c[v]=(c[v]||0)+1);for(const k in c)if(c[k]===1)return +k;return null;};
 const isSuite=d=>['123','234','345','456'].includes(sortAsc(d).join(''));
 const isPaire=d=>new Set(d).size===2;
-function rankHand(d){const s=sortDesc(d);
-  if(is421(s))return{order:7,label:'421',category:'421',meta:{}};
-  if(is111(s))return{order:6,label:'1-1-1',category:'111',meta:{}};
-  if(is11x(s))return{order:5,label:`1-1-${xOfPair(s)}`,category:'11x',meta:{x:xOfPair(s)}};
-  if(isBrelan(s))return{order:4,label:`${s[0]}-${s[0]}-${s[0]}`,category:'Brelan',meta:{x:s[0]}};
-  if(isSuite(s))return{order:3,label:sortAsc(s).join('-'),category:'Suite',meta:{}};
-  if(isPaire(s)){let pair,k;if(s[0]===s[1]){pair=s[0];k=s[2];}else{pair=s[1];k=s[0];}return{order:2,label:`${pair}-${pair}-${k}`,category:'Paire',meta:{pair,k}};}
-  return{order:1,label:`${s[0]}-${s[1]}-${s[2]}`,category:'Haute',meta:{}};
+
+function rankHand(d){
+  const s=sortDesc(d);
+  if(is421(s)) return {order:7,score:1000,label:'421',category:'421',meta:{}};
+  if(is111(s)) return {order:6,score:601,label:'1-1-1',category:'111',meta:{}};
+  if(is11x(s)){ const x=xOfPair(s); return {order:5,score:500+x,label:`1-1-${x}`,category:'11x',meta:{x}}; }
+  if(isBrelan(s)){ const x=s[0]; return {order:4,score:400+x,label:`${x}-${x}-${x}`,category:'Brelan',meta:{x}}; }
+  if(isSuite(s)){ const map={'456':4,'345':3,'234':2,'123':1}; const key=sortAsc(s).join(''); return {order:3,score:300+map[key],label:key.split('').join('-'),category:'Suite',meta:{} }; }
+  if(isPaire(s)){ let pair,k; if(s[0]===s[1]){pair=s[0];k=s[2];}else{pair=s[1];k=s[0];} return {order:2,score:200+pair*10+k,label:`${pair}-${pair}-${k}`,category:'Paire',meta:{pair,k}}; }
+  const [a,b,c]=s; return {order:1,score:100+a*25+b*5+c,label:`${a}-${b}-${c}`,category:'Haute',meta:{}};
 }
-function winnerPoints(r){switch(r.category){case'421':return 8;case'111':return 7;case'11x':return r.meta?.x||0;case'Brelan':return r.meta?.x||0;case'Suite':return 2;case'Paire':return 1;case'Haute':return 1;default:return 0;}}
+function winnerPoints(r){
+  switch(r.category){
+    case'421':return 8; case'111':return 7; case'11x':return r.meta?.x||0;
+    case'Brelan':return r.meta?.x||0; case'Suite':return 2; case'Paire':return 1; case'Haute':return 1; default:return 0;
+  }
+}
 
 /* ===== helpers ===== */
 const seatKeys=room=>Object.keys(room.players||{}).map(k=>+k).filter(n=>!Number.isNaN(n)).sort((a,b)=>a-b);
@@ -233,6 +248,7 @@ async function createRoom(){
   try{
     el.createBtn.disabled = el.joinBtn.disabled = true;
     const code=($('#roomInput').value.trim()||Math.random().toString(36).slice(2,7)).toUpperCase();
+    const exists = await GET('rooms/'+code); if(exists.exists()) return notify('Code déjà utilisé. Essaie un autre.');
     const startPts=Math.max(1,Math.min(99,parseInt($('#startPoints').value||'10',10)));
     const init={createdAt:Date.now(),started:false,locked:false,gameOver:false,startPoints:startPts,current:0,round:1,firstRollsLimit:null,players:{},log:{}};
     await SET('rooms/'+code,init);
@@ -260,11 +276,15 @@ async function joinRoom(code){
     if(seat===null && !room.started){
       let seatIdx=0; while(room.players?.[seatIdx]) seatIdx++;
       const res=await TX(`rooms/${code}/players/${seatIdx}`, cur=>{
-        if(!cur||!cur.id) return { id:myId, name:($('#displayName').value.trim()||'Joueur'), score:room.startPoints||10, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0 };
+        if(!cur||!cur.id) return { id:myId, name:($('#displayName').value.trim()||'Joueur'), score:room.startPoints||10, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0, online:true, away:false };
         return cur;
       });
       if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; console.log('SEAT CLAIMED', seat); }
       if(seat!==null) await appendLog(`🟢 ${($('#displayName').value.trim()||'Joueur')} a rejoint (J${seat+1})`);
+      // presence marker
+      try{
+        db.ref(`rooms/${code}/players/${seat}`).onDisconnect().update({ online:false, away:true, lastSeen:Date.now() });
+      }catch{}
     }
     roomId=code; localStorage.setItem('r421_roomId',roomId); if(seat!==null)localStorage.setItem('r421_seat',String(seat));
     el.lobby.style.display='none'; el.game.style.display='block'; el.players.style.display='grid'; el.logCard.style.display='block'; el.roomCode.textContent=code;
@@ -286,6 +306,8 @@ async function releaseSeat(){
       const leaving=room.players?.[seat]?.name||'Joueur';
       await UPDATE({[`rooms/${roomId}/players/${seat}`]:null});
       await appendLog(`🚪 ${leaving} a quitté (J${seat+1})`);
+    } else {
+      await UPDATE({[`rooms/${roomId}/players/${seat}/away`]:true, [`rooms/${roomId}/players/${seat}/online`]:false, [`rooms/${roomId}/players/${seat}/lastSeen`]:Date.now()});
     }
   }catch(e){ console.error('releaseSeat', e); }
 }
@@ -294,6 +316,14 @@ async function releaseSeat(){
 el.createBtn.addEventListener('click', ()=>{ try{ createRoom(); }catch(e){ notify('Erreur bouton Créer'); } });
 el.joinBtn  .addEventListener('click', ()=>{ try{ joinRoom($('#roomInput').value); }catch(e){ notify('Erreur bouton Rejoindre'); } });
 el.leaveBtn .addEventListener('click', async ()=>{ try{ await releaseSeat(); }catch(e){} localStorage.removeItem('r421_roomId'); localStorage.removeItem('r421_seat'); location.reload(); });
+el.toggleAllBtn.addEventListener('click', async ()=>{
+  try{
+    const rs=await GET('rooms/'+roomId); const room=rs.val(); const me=room.players[seat];
+    if(!room.started||room.current!==seat||me.done||me.rollsLeft===3)return;
+    const all = me.roll?.every(Boolean);
+    await safeUpdate({[`players/${seat}/roll`]: [!all,!all,!all]});
+  }catch(e){ notify('Erreur sélection'); }
+});
 
 /* ===== Live + watchdog ===== */
 let lastRoom=null, watcher=null;
@@ -301,7 +331,7 @@ function subscribe(){
   if(watcher) clearInterval(watcher);
   ON('rooms/'+roomId, snap=>{ if(!snap.exists())return; lastRoom=snap.val(); render(lastRoom); });
   watcher=setInterval(async()=>{
-    if(!lastRoom||!lastRoom.started||lastRoom.gameOver)return;
+    if(!lastRoom||!lastRoom.started||lastRoom.gameOver||lastRoom.settling)return;
     const seats=joinedSeats(lastRoom);
     if(seats.length>=2 && seats.every(i=>lastRoom.players[i].done)){
       console.log('WATCHDOG settle'); await settleTransaction();
@@ -325,9 +355,15 @@ function renderPlayers(room){
   });
 }
 function render(room){
-  el.log.innerHTML='';
+  // append-only log
   const entries=room.log?Object.values(room.log).sort((a,b)=>a.t-b.t):[];
-  entries.forEach(e=>{const p=document.createElement('p');p.textContent=e.msg;el.log.appendChild(p);});
+  const newOnes = entries.filter(e=>e.t>lastLogTs);
+  if(newOnes.length){
+    newOnes.forEach(e=>{const p=document.createElement('p');p.textContent=e.msg;el.log.appendChild(p);});
+    lastLogTs = newOnes[newOnes.length-1].t;
+    el.log.scrollTop = el.log.scrollHeight;
+  }
+
   renderPlayers(room);
   const seats=joinedSeats(room);
   el.startBtn.disabled=room.started||seats.length<2;
@@ -336,6 +372,8 @@ function render(room){
   const myTurn=!!(me&&room.started&&room.current===seat&&!me.done);
   el.currentPlayer.textContent=room.players[room.current]?.name||'—';
   el.rollsLeft.textContent=me?(me.rollsLeft??'—'):'—';
+
+  // dice UI
   el.dice.innerHTML='';
   const dice=me?(me.dice||[1,1,1]):[1,1,1];
   const firstRoll=me?(me.rollsLeft===3):false;
@@ -343,14 +381,15 @@ function render(room){
     const b=document.createElement('button');
     b.className='die'+((me&&me.roll&&me.roll[i])?' roll':'');
     b.innerHTML=`<span>${v}</span><small>${(me&&me.roll&&me.roll[i])?'à relancer':'gardé'}</small>`;
-    b.onclick=()=>{ if(firstRoll) return; toggleRoll(i); };
+    b.onclick=()=>{ if(firstRoll||!myTurn||isRolling) return; toggleRoll(i); };
     el.dice.appendChild(b);
   });
-  if(firstRoll&&me) safeUpdate({[`players/${seat}/roll`]:[true,true,true]});
+  if(firstRoll&&me&&!(me.roll && me.roll.every(Boolean))) safeUpdate({[`players/${seat}/roll`]:[true,true,true]});
+
   const limit=room.firstRollsLimit; const used=me?(3-me.rollsLeft):0; const overLimit=(limit!=null&&used>=limit);
-  el.toggleAllBtn.disabled=(!myTurn||firstRoll);
-  el.rollBtn.disabled=(!myTurn||me?.done||overLimit||(me&&me.rollsLeft<=0));
-  el.endTurnBtn.disabled=(!myTurn||me?.done);
+  el.toggleAllBtn.disabled=(!myTurn||firstRoll||isRolling);
+  el.rollBtn.disabled=(!myTurn||me?.done||overLimit||(me&&me.rollsLeft<=0)||isRolling);
+  el.endTurnBtn.disabled=(!myTurn||me?.done||isRolling);
   if(room.gameOver){
     el.overlay.style.display='flex';
     const w=room.winnerSeat!=null?(room.players[room.winnerSeat]?.name||'—'):'—';
@@ -370,32 +409,44 @@ async function toggleRoll(i){
 async function startGame(){
   const rs=await GET('rooms/'+roomId); const room=rs.val();
   const seats=joinedSeats(room); if(seats.length<2)return notify('Il faut au moins 2 joueurs.');
-  const upd={}; seats.forEach(i=>{const p=room.players[i]; upd['players/'+i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0};});
-  upd.current=seats[0]; upd.round=1; upd.started=true; upd.locked=true; upd.gameOver=false; upd.firstRollsLimit=null;
+  const upd={}; seats.forEach(i=>{const p=room.players[i]; upd['players/'+i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0,away:false,online:true};});
+  upd.current=seats[0]; upd.round=1; upd.started=true; upd.locked=true; upd.gameOver=false; upd.firstRollsLimit=null; upd.settling=false;
   await safeUpdate(upd); await appendLog(`🚀 Partie démarrée (joueurs: ${seats.length})`);
 }
 el.startBtn.addEventListener('click',()=>{ try{ startGame(); }catch(e){ notify('Erreur démarrage'); } });
 
 async function rollSelected(){
   const rs=await GET('rooms/'+roomId); const room=rs.val(); const me=room.players[seat];
-  if(!room.started||room.current!==seat||me.done||me.rollsLeft<=0)return;
+  if(!room.started||room.current!==seat||me.done||me.rollsLeft<=0||isRolling)return;
   const limit=room.firstRollsLimit; const used=3-me.rollsLeft; if(limit!=null&&used>=limit)return;
+
+  isRolling = true; document.body.classList.add('rolling'); render(room);
+
   const dice=me.dice.slice();
   const toRoll=me.roll.map((x,idx)=>x?idx:null).filter(x=>x!==null);
-  const final={}; toRoll.forEach(i=>final[i]=1+Math.floor(Math.random()*6));
+  const final={}; toRoll.forEach(i=>final[i]=d6());
+
   for(const i of toRoll){
-    const steps=10+Math.floor(Math.random()*6);
-    for(let t=0;t<steps;t++){ dice[i]=1+Math.floor(Math.random()*6); const btn=el.dice.children[i]; if(btn) btn.querySelector('span').textContent=dice[i]; await new Promise(r=>setTimeout(r,40)); }
-    dice[i]=final[i]; const btn=el.dice.children[i]; if(btn) btn.querySelector('span').textContent=dice[i]; await new Promise(r=>setTimeout(r,100));
+    const steps=10+randInt(0,5);
+    for(let t=0;t<steps;t++){
+      dice[i]=d6();
+      const btn=el.dice.children[i]; if(btn) btn.querySelector('span').textContent=dice[i];
+      await new Promise(r=>setTimeout(r,40));
+    }
+    dice[i]=final[i]; const btn=el.dice.children[i]; if(btn) btn.querySelector('span').textContent=dice[i];
+    await new Promise(r=>setTimeout(r,100));
   }
+
   const r=rankHand(dice);
   await safeUpdate({[`players/${seat}/dice`]:dice,[`players/${seat}/lastRank`]:r,[`players/${seat}/rollsLeft`]:me.rollsLeft-1,[`players/${seat}/rollsUsed`]:(me.rollsUsed||0)+1});
+
+  isRolling = false; document.body.classList.remove('rolling');
 }
 el.rollBtn.addEventListener('click',()=>{ try{ rollSelected(); }catch(e){ notify('Erreur lancer'); } });
 
 async function endTurn(){
   const rs=await GET('rooms/'+roomId); let room=rs.val(); const me=room.players[seat];
-  if(!room.started||room.current!==seat||me.done)return;
+  if(!room.started||room.current!==seat||me.done||isRolling)return;
   if(me.rollsLeft===3)await rollSelected();
   const me2=(await GET(`rooms/${roomId}/players/${seat}`)).val();
   if(!me2.lastRank){const r=rankHand(me2.dice); await safeUpdate({[`players/${seat}/lastRank`]:r});}
@@ -415,31 +466,42 @@ async function endTurn(){
 el.endTurnBtn.addEventListener('click',()=>{ try{ endTurn(); }catch(e){ notify('Erreur fin de tour'); } });
 
 async function settleTransaction(){
-  await TX('rooms/'+roomId,(room)=>{
-    if(!room)return room;
-    const seats=joinedSeats(room); if(seats.length<2)return room;
+  // single-flight using TX on the whole room and a 'settling' gate
+  const res = await TX('rooms/'+roomId,(room)=>{
+    if(!room) return room;
+    if(room.settling) return room;  // someone else is settling
+    const seats=joinedSeats(room); if(seats.length<2) return room;
+    room.settling = true;
+
     const rankOf=i=>(room.players[i].lastRank||rankHand(room.players[i].dice));
-    const ranked=seats.map(i=>({i,r:rankOf(i)})).sort((a,b)=>a.r.order-b.r.order).reverse();
-    const top=ranked[0].r.order, bot=ranked[ranked.length-1].r.order;
-    const bestSeats=ranked.filter(x=>x.r.order===top).map(x=>x.i);
-    const worstSeats=ranked.filter(x=>x.r.order===bot).map(x=>x.i);
-    const bestSeat=bestSeats[0], worstSeat=worstSeats[0];
-    const winRank=rankOf(bestSeat); const amount=winnerPoints(winRank);
+    const ranked=seats.map(i=>({i,r:rankOf(i)})).sort((a,b)=> (b.r.order-a.r.order) || (b.r.score-a.r.score));
+    const top=ranked[0].r; const bot=ranked[ranked.length-1].r;
+    const bestSeat=ranked[0].i, worstSeat=ranked[ranked.length-1].i;
+
+    const amount=winnerPoints(top);
     if(amount>0&&bestSeat!=null&&worstSeat!=null){
       const before=room.players[bestSeat].score|0;
-      const paid=Math.min(before,amount);
+      const paid=Math.min(before,amount); // best hand pays
       room.players[bestSeat].score=before-paid;
       room.players[worstSeat].score=(room.players[worstSeat].score||0)+paid;
-      room.lastTransfer={payer:bestSeat,payee:worstSeat,amount:paid,combo:winRank.label};
+      room.lastTransfer={payer:bestSeat,payee:worstSeat,amount:paid,combo:top.label};
     }
+
     let winnerSeat=null; for(const i of seats) if((room.players[i].score|0)===0){winnerSeat=i;break;}
-    if(winnerSeat!=null){room.started=false;room.gameOver=true;room.winnerSeat=winnerSeat;room.lastSettle=Date.now();return room;}
-    room.round=(room.round||1)+1; room.current=worstSeats[0]; room.firstRollsLimit=null;
+    if(winnerSeat!=null){
+      room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat; room.lastSettle=Date.now(); room.settling=false;
+      return room;
+    }
+    // next round: worst starts
+    room.round=(room.round||1)+1; room.current=worstSeat; room.firstRollsLimit=null;
     seats.forEach(i=>{const p=room.players[i]; room.players[i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0};});
-    room.lastSettle=Date.now(); return room;
+    room.lastSettle=Date.now(); room.settling=false;
+    return room;
   });
+
+  // only the committing client logs transfer
   const rs=await GET('rooms/'+roomId); const room=rs.val();
-  if(room.lastTransfer){
+  if(res.committed && room.lastTransfer){
     const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
     const q=room.players[room.lastTransfer.payee]?.name||'Joueur';
     await appendLog(`✅ ${p} paie ${room.lastTransfer.amount} → ${q} (${room.lastTransfer.combo})`);
@@ -448,20 +510,13 @@ async function settleTransaction(){
 }
 el.replayBtn.addEventListener('click',async()=>{
   const rs=await GET('rooms/'+roomId); const room=rs.val(); const seats=joinedSeats(room); const upd={};
-  seats.forEach(i=>{const base=room.startPoints||10; const p=room.players[i]; upd['players/'+i]={...p,score:base,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0};});
-  upd.gameOver=false; upd.winnerSeat=null; upd.started=false; upd.firstRollsLimit=null;
+  seats.forEach(i=>{const base=room.startPoints||10; const p=room.players[i]; upd['players/'+i]={...p,score:base,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0,away:false,online:true};});
+  upd.gameOver=false; upd.winnerSeat=null; upd.started=false; upd.firstRollsLimit=null; upd.settling=false;
   await safeUpdate(upd);
 });
 </script>
-<div id="toast" class="toast"></div>
-<div id="dbgPanel">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-    <strong style="font-size:12px;">🔧 Debug</strong>
-    <button id="dbgClear" style="margin-left:auto;">Clear</button>
-    <button id="dbgCollapse">Collapse</button>
-  </div>
-  <pre id="dbgLog"></pre>
-</div>
 </body>
 </html>
+
+If you want server-side dice and validation next, say so. That is the real cheat fix.
 
