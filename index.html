@@ -1,3 +1,5 @@
+Voici le fichier complet prêt à coller dans GitHub. Remplace ton index.html par ceci.
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -35,11 +37,10 @@
   .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; padding:20px; }
   .dialog { background:#0b1220; border:1px solid #1f2937; border-radius:14px; padding:18px; max-width:420px; width:90%; text-align:center; }
   .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:16px; background:#0b1220; border:1px solid #f43f5e55; color:#fecaca; padding:10px 14px; border-radius:10px; display:none; z-index:999; }
-  /* debug panel */
   #dbgPanel { position:fixed; left:8px; right:8px; bottom:10px; max-height:40vh; overflow:auto; background:#0b1220; border:1px solid #334155; border-radius:10px; font:12px/1.3 system-ui; padding:8px; z-index:9999; color:#e5e7eb }
   #dbgPanel pre{white-space:pre-wrap;margin:0;overflow-wrap:anywhere}
   #dbgPanel button{background:#111827;border:1px solid #334155;border-radius:8px;padding:4px 8px;color:#e5e7eb}
-  .rolling { pointer-events:none; } /* bloque les clics pendant l’anim sans figer les boutons */
+  .rolling { pointer-events:none; }
 </style>
 </head>
 <body>
@@ -112,7 +113,6 @@
   <pre id="dbgLog"></pre>
 </div>
 
-<!-- Firebase compat (NO modules) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
 
@@ -130,7 +130,7 @@ const cfg = {
 firebase.initializeApp(cfg);
 const db = firebase.database();
 
-/* ===== tiny DB adapters (string paths) ===== */
+/* ===== tiny DB adapters ===== */
 const SET    = (path, val)      => db.ref(path).set(val);
 const UPDATE = (patches)        => db.ref().update(patches);
 const TX     = (path, fn)       => db.ref(path).transaction(fn);
@@ -138,13 +138,12 @@ const GET    = (path)           => db.ref(path).get();
 const ON     = (path, cb)       => db.ref(path).on('value', s => cb({exists:()=>s.exists(), val:()=>s.val()}));
 const PUSH   = (path, val)      => db.ref(path).push(val);
 
-/* ===== SAFE logger & toast ===== */
+/* ===== logger & toast ===== */
 (() => {
   const logEl = document.querySelector('#dbgLog');
   const btnClear = document.querySelector('#dbgClear');
   const btnColl  = document.querySelector('#dbgCollapse');
   let collapsed=false, hasPanel=!!logEl;
-
   function addLine(level,...args){
     if(!hasPanel) return;
     const t=new Date().toISOString().split('T')[1].replace('Z','');
@@ -154,14 +153,12 @@ const PUSH   = (path, val)      => db.ref(path).push(val);
   }
   if(btnClear) btnClear.onclick=()=>{ if(hasPanel) logEl.textContent=''; };
   if(btnColl)  btnColl.onclick =()=>{ if(!hasPanel) return; collapsed=!collapsed; logEl.style.display=collapsed?'none':'block'; btnColl.textContent=collapsed?'Expand':'Collapse'; };
-
   const _c={...console};
   console.log  = (...a)=>{ addLine('log',...a);  _c.log(...a); };
   console.warn = (...a)=>{ addLine('warn',...a); _c.warn(...a); };
   console.error= (...a)=>{ addLine('error',...a);_c.error(...a); };
   window.addEventListener('error',e=>addLine('onerror',e.message));
   window.addEventListener('unhandledrejection',e=>addLine('promise', e.reason?.message||String(e.reason)));
-
   const toast = document.querySelector('#toast');
   window.notify = (msg) => {
     if (toast) { toast.textContent=msg; toast.style.display='block'; clearTimeout(window.notify._t); window.notify._t=setTimeout(()=>toast.style.display='none',3000); }
@@ -217,16 +214,23 @@ function winnerPoints(r){
     case'Brelan':return r.meta?.x||0; case'Suite':return 2; case'Paire':return 1; case'Haute':return 1; default:return 0;
   }
 }
+function betterHand(a,b){
+  const pa=winnerPoints(a), pb=winnerPoints(b);
+  if(pa!==pb) return pb-pa;
+  if(a.category==='11x' && b.category!=='11x') return -1;
+  if(b.category==='11x' && a.category!=='11x') return 1;
+  return (b.order-a.order) || (b.score-a.score);
+}
 
 /* ===== helpers ===== */
 const seatKeys=room=>Object.keys(room.players||{}).map(k=>+k).filter(n=>!Number.isNaN(n)).sort((a,b)=>a-b);
 const joinedSeats=room=>seatKeys(room).filter(i=>room.players[i]?.id);
 function setMiniDice(container,dice){container.innerHTML='';(dice||[1,1,1]).forEach(v=>{const d=document.createElement('div');d.className='d';d.textContent=v;container.appendChild(d);});}
 function safePath(p){if(!roomId)return{};const out={};for(const k in p)out[`rooms/${roomId}/${k}`]=p[k];return out;}
-async function safeUpdate(p){if(!roomId)return;console.log('safeUpdate',p);await UPDATE(safePath(p));}
-async function appendLog(msg){if(!roomId)return;try{await PUSH(`rooms/${roomId}/log`,{t:Date.now(),msg});console.log('LOG+',msg);}catch(e){console.error('log',e.message);}}
+async function safeUpdate(p){if(!roomId)return;await UPDATE(safePath(p));}
+async function appendLog(msg){if(!roomId)return;try{await PUSH(`rooms/${roomId}/log`,{t:Date.now(),msg});}catch(e){}}
 
-/* ===== Firebase HEALTHCHECK (runs once on load) ===== */
+/* ===== healthcheck ===== */
 (async()=>{
   try{
     const key = Math.random().toString(36).slice(2,8);
@@ -235,7 +239,6 @@ async function appendLog(msg){if(!roomId)return;try{await PUSH(`rooms/${roomId}/
     console.log('HEALTHCHECK ok?', snap.exists());
   }catch(e){
     notify('Firebase healthcheck failed: '+e.message);
-    console.error('HEALTHCHECK', e);
   }
 })();
 
@@ -244,19 +247,14 @@ async function createRoom(){
   try{
     el.createBtn.disabled = el.joinBtn.disabled = true;
     const code=($('#roomInput').value.trim()||Math.random().toString(36).slice(2,7)).toUpperCase();
-    const exists = await GET('rooms/'+code); if(exists.exists()) return notify('Code déjà utilisé. Essaie un autre.');
+    const exists = await GET('rooms/'+code); if(exists.exists()) return notify('Code déjà utilisé.');
     const startPts=Math.max(1,Math.min(99,parseInt($('#startPoints').value||'10',10)));
     const init={createdAt:Date.now(),started:false,locked:false,gameOver:false,startPoints:startPts,current:0,round:1,firstRollsLimit:null,players:{},log:{}};
     await SET('rooms/'+code,init);
     roomId=code; localStorage.setItem('r421_roomId',roomId);
-    console.log('ROOM CREATED',code);
     await joinRoom(code);
-  }catch(e){
-    notify('Création: '+e.message);
-    console.error(e);
-  }finally{
-    el.createBtn.disabled = el.joinBtn.disabled = false;
-  }
+  }catch(e){ notify('Création: '+e.message); }
+  finally{ el.createBtn.disabled = el.joinBtn.disabled = false; }
 }
 async function joinRoom(code){
   try{
@@ -275,22 +273,15 @@ async function joinRoom(code){
         if(!cur||!cur.id) return { id:myId, name:($('#displayName').value.trim()||'Joueur'), score:room.startPoints||10, dice:[1,1,1], roll:[true,true,true], rollsLeft:3, done:false, lastRank:null, rollsUsed:0, online:true, away:false };
         return cur;
       });
-      if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; console.log('SEAT CLAIMED', seat); }
+      if(res.committed && res.snapshot.val()?.id===myId){ seat=seatIdx; }
       if(seat!==null) await appendLog(`🟢 ${($('#displayName').value.trim()||'Joueur')} a rejoint (J${seat+1})`);
-      try{
-        db.ref(`rooms/${code}/players/${seat}`).onDisconnect().update({ online:false, away:true, lastSeen:Date.now() });
-      }catch{}
+      try{ db.ref(`rooms/${code}/players/${seat}`).onDisconnect().update({ online:false, away:true, lastSeen:Date.now() }); }catch{}
     }
     roomId=code; localStorage.setItem('r421_roomId',roomId); if(seat!==null)localStorage.setItem('r421_seat',String(seat));
     el.lobby.style.display='none'; el.game.style.display='block'; el.players.style.display='grid'; el.logCard.style.display='block'; el.roomCode.textContent=code;
-    console.log('JOINED ROOM',code,'SEAT',seat);
     subscribe();
-  }catch(e){
-    notify('Rejoindre: '+e.message);
-    console.error(e);
-  }finally{
-    el.createBtn.disabled = el.joinBtn.disabled = false;
-  }
+  }catch(e){ notify('Rejoindre: '+e.message); }
+  finally{ el.createBtn.disabled = el.joinBtn.disabled = false; }
 }
 async function releaseSeat(){
   try{
@@ -304,7 +295,7 @@ async function releaseSeat(){
     } else {
       await UPDATE({[`rooms/${roomId}/players/${seat}/away`]:true, [`rooms/${roomId}/players/${seat}/online`]:false, [`rooms/${roomId}/players/${seat}/lastSeen`]:Date.now()});
     }
-  }catch(e){ console.error('releaseSeat', e); }
+  }catch(e){}
 }
 
 /* Buttons */
@@ -329,7 +320,7 @@ function subscribe(){
     if(!lastRoom||!lastRoom.started||lastRoom.gameOver||lastRoom.settling)return;
     const seats=joinedSeats(lastRoom);
     if(seats.length>=2 && seats.every(i=>lastRoom.players[i].done)){
-      console.log('WATCHDOG settle'); await settleTransaction();
+      await settleTransaction();
     }
   },1000);
 }
@@ -350,7 +341,6 @@ function renderPlayers(room){
   });
 }
 function render(room){
-  // append-only log
   const entries=room.log?Object.values(room.log).sort((a,b)=>a.t-b.t):[];
   const newOnes = entries.filter(e=>e.t>lastLogTs);
   if(newOnes.length){
@@ -362,13 +352,20 @@ function render(room){
   renderPlayers(room);
   const seats=joinedSeats(room);
   el.startBtn.disabled=room.started||seats.length<2;
-  el.interBanner.textContent=room.started?'':`Joueurs prêts: ${seats.length} (min 2)`;
+
+  if (!room.started) {
+    el.interBanner.textContent = `Joueurs prêts: ${seats.length} (min 2)`;
+  } else if (room.firstRollsLimit!=null) {
+    el.interBanner.textContent = `Limite de lancers ce tour: ${room.firstRollsLimit}`;
+  } else {
+    el.interBanner.textContent = '';
+  }
+
   const me=(seat!=null&&room.players[seat])?room.players[seat]:null;
   const myTurn=!!(me&&room.started&&room.current===seat&&!me.done);
   el.currentPlayer.textContent=room.players[room.current]?.name||'—';
   el.rollsLeft.textContent=me?(me.rollsLeft??'—'):'—';
 
-  // dice UI
   el.dice.innerHTML='';
   const dice=me?(me.dice||[1,1,1]):[1,1,1];
   const firstRoll=me?(me.rollsLeft===3):false;
@@ -381,8 +378,11 @@ function render(room){
   });
   if(firstRoll&&me&&!(me.roll && me.roll.every(Boolean))) safeUpdate({[`players/${seat}/roll`]:[true,true,true]});
 
+  const curRank = rankHand(dice);
+  const pts = winnerPoints(curRank);
+  el.comboHint.textContent = `${curRank.label} — vaut ${pts} pt${pts>1?'s':''}`;
+
   const limit=room.firstRollsLimit; const used=me?(3-me.rollsLeft):0; const overLimit=(limit!=null&&used>=limit);
-  // important: on ne dépend plus de isRolling pour disabled
   el.toggleAllBtn.disabled = (!myTurn || firstRoll);
   el.rollBtn.disabled      = (!myTurn || me?.done || overLimit || (me && me.rollsLeft<=0));
   el.endTurnBtn.disabled   = (!myTurn || me?.done);
@@ -401,7 +401,6 @@ async function toggleRoll(i){
   if(me.rollsLeft===3)return;
   const roll=me.roll.slice(); roll[i]=!roll[i];
   await safeUpdate({[`players/${seat}/roll`]:roll});
-  console.log('TOGGLE ROLL',i,roll);
 }
 async function startGame(){
   const rs=await GET('rooms/'+roomId); const room=rs.val();
@@ -435,9 +434,16 @@ async function rollSelected(){
   }
 
   const r=rankHand(dice);
-  await safeUpdate({[`players/${seat}/dice`]:dice,[`players/${seat}/lastRank`]:r,[`players/${seat}/rollsLeft`]:me.rollsLeft-1,[`players/${seat}/rollsUsed`]:(me.rollsUsed||0)+1});
+  const newLeft = me.rollsLeft-1;
+  await safeUpdate({
+    [`players/${seat}/dice`]:dice,
+    [`players/${seat}/lastRank`]:r,
+    [`players/${seat}/rollsLeft`]:newLeft,
+    [`players/${seat}/rollsUsed`]:(me.rollsUsed||0)+1
+  });
 
   isRolling = false; document.body.classList.remove('rolling');
+  if (newLeft===0) { await endTurn(); }
 }
 el.rollBtn.addEventListener('click',()=>{ try{ rollSelected(); }catch(e){ notify('Erreur lancer'); } });
 
@@ -449,7 +455,7 @@ async function endTurn(){
   if(!me2.lastRank){const r=rankHand(me2.dice); await safeUpdate({[`players/${seat}/lastRank`]:r});}
   await safeUpdate({[`players/${seat}/done`]:true,[`players/${seat}/roll`]:[false,false,false]});
   const used=me2.rollsUsed||(3-me2.rollsLeft);
-  if(room.firstRollsLimit==null){await safeUpdate({firstRollsLimit:used}); await appendLog(`🎯 Limite de lancers ce tour: ${used} (par ${me2.name||'Joueur'})`);}
+  if(room.firstRollsLimit==null){await safeUpdate({firstRollsLimit:used});}
   room=(await GET('rooms/'+roomId)).val();
   const seats=joinedSeats(room); const remaining=seats.filter(i=>!room.players[i].done);
   if(remaining.length>0){
@@ -460,30 +466,25 @@ async function endTurn(){
     await settleTransaction();
   }
 }
-el.endTurnBtn.addEventListener('click',()=>{ try{ endTurn(); }catch(e){ notify('Erreur fin de tour'); } });
 
 /* ===== Règlement sécurisé ===== */
 async function settleTransaction(){
-  // 1) lock sur 'settling' pour single-flight
   const lock = await TX(`rooms/${roomId}/settling`, v => (v ? v : true));
-  if (!lock.committed || lock.snapshot.val() !== true) return; // quelqu’un règle déjà
+  if (!lock.committed || lock.snapshot.val() !== true) return;
 
   try{
     const res = await TX('rooms/'+roomId,(room)=>{
       if(!room) return room;
-
-      // 2) recheck atomique: tous done ?
       const seats = Object.keys(room.players||{}).map(Number).filter(n=>!Number.isNaN(n)).filter(i=>room.players[i]?.id);
       if (seats.length<2) return room;
       const allDone = seats.every(i => room.players[i]?.done === true);
-      if (!allDone) return room; // ne rien faire si pas tous terminés
+      if (!allDone) return room;
 
       const rankOf=i=>(room.players[i].lastRank||rankHand(room.players[i].dice));
-      const ranked=seats.map(i=>({i,r:rankOf(i)}))
-                        .sort((a,b)=> (b.r.order-a.r.order) || (b.r.score-a.r.score));
+      const ranked=seats.map(i=>({i,r:rankOf(i)})).sort((A,B)=> betterHand(A.r,B.r));
       const bestSeat=ranked[0].i, worstSeat=ranked[ranked.length-1].i;
       const top=ranked[0].r;
-      const amount=winnerPoints(top); // best hand paie
+      const amount=winnerPoints(top);
 
       if(amount>0&&bestSeat!=null&&worstSeat!=null){
         const before=room.players[bestSeat].score|0;
@@ -493,21 +494,18 @@ async function settleTransaction(){
         room.lastTransfer={payer:bestSeat,payee:worstSeat,amount:paid,combo:top.label};
       }
 
-      // victoire ?
       let winnerSeat=null; for(const i of seats) if((room.players[i].score|0)===0){winnerSeat=i;break;}
       if(winnerSeat!=null){
         room.started=false; room.gameOver=true; room.winnerSeat=winnerSeat; room.lastSettle=Date.now();
         return room;
       }
 
-      // prochaine manche: pire main commence
       room.round=(room.round||1)+1; room.current=worstSeat; room.firstRollsLimit=null;
       seats.forEach(i=>{const p=room.players[i]; room.players[i]={...p,dice:[1,1,1],roll:[true,true,true],rollsLeft:3,done:false,lastRank:null,rollsUsed:0};});
       room.lastSettle=Date.now();
       return room;
     });
 
-    // 3) log unique si un transfert a eu lieu
     const rs=await GET('rooms/'+roomId); const room=rs.val();
     if(res.committed && room.lastTransfer){
       const p=room.players[room.lastTransfer.payer]?.name||'Joueur';
@@ -516,7 +514,6 @@ async function settleTransaction(){
       await safeUpdate({lastTransfer:null});
     }
   } finally {
-    // 4) libère le lock
     await UPDATE({[`rooms/${roomId}/settling`]: false});
   }
 }
