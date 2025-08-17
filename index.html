@@ -1,22 +1,88 @@
-<!-- in <head> -->
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0f172a">
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>421 – Lobby</title>
+  <style>
+    :root{--bg:#0f172a;--panel:#111827;--muted:#94a3b8;--fg:#e5e7eb;--btn:#0b1220;--bd:#263245;--accent:#22d3ee}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    .wrap{max-width:560px;margin:0 auto;padding:16px}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:14px;margin-top:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    h1{margin:0 0 6px 0} h2{margin:0 0 8px 0;color:var(--accent);font-size:18px}
+    input,button{width:100%;padding:14px 12px;border-radius:12px;border:1px solid var(--bd);background:var(--btn);color:var(--fg)}
+    button.primary{background:#0e749022;border-color:#164e63;font-weight:700}
+    button:disabled{opacity:.6} .hidden{display:none}
+    ul{list-style:none;margin:8px 0 0;padding:0}
+    li{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bd);border-radius:12px;padding:10px 12px;margin-top:8px}
+    .small{color:var(--muted);font-size:13px}
+    .st{font-weight:700}.red{color:#ef4444}.green{color:#22d3ee}
+    .share{display:flex;gap:8px;align-items:center;margin-top:8px}
+    @media(min-width:560px){input,button{width:auto}}
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎲 421</h1>
 
-<!-- inputs -->
-<input id="c_name" placeholder="Ton pseudo" autocomplete="name" autocapitalize="words">
-<input id="c_points" type="number" inputmode="numeric" min="1" max="99" value="21">
+    <!-- Welcome -->
+    <section id="screenWelcome" class="card">
+      <div class="row">
+        <button id="btnGoCreate" class="primary">Créer une partie</button>
+        <button id="btnGoJoin">Rejoindre une partie</button>
+      </div>
+    </section>
 
-<input id="j_name" placeholder="Ton pseudo" autocomplete="username" autocapitalize="words">
-<input id="j_code" placeholder="Code (ex: 5L9QK)" inputmode="latin-prose" autocapitalize="characters" maxlength="6">
+    <!-- Create -->
+    <section id="screenCreate" class="card hidden">
+      <h2>Créer une partie</h2>
+      <div class="row">
+        <input id="c_name" placeholder="Ton pseudo" autocomplete="name" autocapitalize="words" />
+        <input id="c_points" type="number" inputmode="numeric" min="1" max="99" value="21" title="Points de départ" />
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="createBtn" class="primary">Créer</button>
+        <button id="back1">Retour</button>
+      </div>
+      <div id="c_err" class="small"></div>
+    </section>
 
-<!-- share row in lobby -->
-<div class="row" style="gap:6px;margin:6px 0 10px">
-  <span id="youAre">—</span>
-  <button id="readyBtn" class="primary">Je suis prêt</button>
-  <button id="startGameBtn" class="primary" style="margin-left:auto;display:none;" disabled>Lancer</button>
-</div>
-<div class="share">
-  <span class="small">Code: <b id="shareCode">—</b></span>
-  <button id="copyCodeBtn" aria-label="Copier le code">Copier</button>
-  <button id="shareBtn" aria-label="Partager">Partager</button>
-</div>
+    <!-- Join -->
+    <section id="screenJoin" class="card hidden">
+      <h2>Rejoindre une partie</h2>
+      <div class="row">
+        <input id="j_name" placeholder="Ton pseudo" autocomplete="username" autocapitalize="words" />
+        <input id="j_code" placeholder="Code (ex: 5L9QK)" inputmode="latin-prose" autocapitalize="characters" maxlength="6" />
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="joinBtn" class="primary">Rejoindre</button>
+        <button id="back2">Retour</button>
+      </div>
+      <div id="j_err" class="small"></div>
+    </section>
+
+    <!-- Lobby -->
+    <section id="screenLobby" class="card hidden">
+      <h2>Salon <span id="roomCode">—</span></h2>
+      <div class="row" style="gap:6px;margin:6px 0 10px">
+        <span id="youAre" class="small">—</span>
+        <button id="readyBtn" class="primary">Je suis prêt</button>
+        <button id="startGameBtn" class="primary" style="margin-left:auto;display:none" disabled>Lancer</button>
+      </div>
+      <div class="share">
+        <span class="small">Code: <b id="shareCode">—</b></span>
+        <button id="copyCodeBtn">Copier</button>
+        <button id="shareBtn">Partager</button>
+      </div>
+      <ul id="players"></ul>
+      <div id="hint" class="small" style="margin-top:8px;"></div>
+    </section>
+  </div>
+
+  <script src="lobby.js" defer></script>
+</body>
+</html>
