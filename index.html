@@ -1,104 +1,47 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>421 – Multi</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>421 - Welcome</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding:20px; }
+    .hidden { display:none; }
+    .screen { margin-top:20px; }
+    button { margin:4px; padding:6px 10px; }
+  </style>
 </head>
 <body>
-  <header>
-    <h1>🎲 421 – Multi</h1>
-    <div class="hdr-actions">
-      <button id="helpBtn">❔ Aide</button>
-      <div class="small">Aucun compte requis</div>
-    </div>
-  </header>
+  <h1>Bienvenue sur 421</h1>
 
-  <main>
-    <section id="lobby" class="card">
-      <h2>Créer / Rejoindre la salle</h2>
-      <div class="row">
-        <input id="displayName" placeholder="Ton pseudo" />
-        <input id="roomInput" placeholder="Code (ex: 5L9QK)" />
-        <input id="startPoints" type="number" min="1" max="99" value="10" style="width:90px" title="Points de départ"/>
-        <button id="createBtn" class="primary">Créer</button>
-        <button id="joinBtn">Rejoindre</button>
-      </div>
-      <div class="small">Le créateur démarre quand tout le monde est là (min 2 joueurs).</div>
-    </section>
-
-    <section id="game" class="card" style="display:none;">
-      <h2>Partie</h2>
-      <div class="row" style="justify-content:space-between; align-items:start;">
-        <div>
-          <div class="muted">Salle</div>
-          <div id="roomCode" class="small">—</div>
-          <div id="interBanner" class="small" style="margin-top:6px;"></div>
-          <div class="muted" style="margin-top:6px;">Joueur actuel</div>
-          <div id="currentPlayer" style="font-size:22px;font-weight:800;">—</div>
-          <div class="muted" style="margin-top:6px;">Lancers restants : <span id="rollsLeft">—</span></div>
-        </div>
-        <div>
-          <div class="muted">Ta main</div>
-          <div id="dice" class="dice"></div>
-          <div id="comboHint" class="small">—</div>
-        </div>
-        <div class="row" style="flex-direction:column; min-width:220px;">
-          <button id="rollBtn" class="primary">Relancer (sélectionnés)</button>
-          <button id="toggleAllBtn">Tout sélectionner / désélectionner</button>
-          <button id="endTurnBtn">Terminer mon tour</button>
-          <button id="startBtn" class="primary">Démarrer la partie</button>
-          <button id="leaveBtn">Quitter</button>
-        </div>
-      </div>
-    </section>
-
-    <section id="players" class="players" style="display:none;"></section>
-
-    <section id="logCard" class="card" style="display:none;">
-      <h2>Historique</h2>
-      <div id="log" class="log"></div>
-    </section>
-  </main>
-
-  <!-- Popup victoire + classement -->
-  <div id="overlay" class="overlay">
-    <div class="dialog">
-      <div style="font-size:22px; font-weight:800; margin-bottom:8px;">🎉 Fin de partie</div>
-      <div id="winnerName" class="small" style="margin-bottom:10px;">—</div>
-      <div id="finalRanking" class="small" style="line-height:1.5;"></div>
-      <div class="row" style="margin-top:12px;">
-        <button id="replayBtn" class="primary">Rejouer (mêmes joueurs)</button>
-        <button id="closeOverlayBtn">Fermer</button>
-      </div>
-    </div>
+  <!-- Welcome Screen -->
+  <div id="welcome" class="screen">
+    <button onclick="showCreate()">Créer une partie</button>
+    <button onclick="showJoin()">Rejoindre une partie</button>
   </div>
 
-  <!-- Popup aide -->
-  <div id="helpOverlay" class="overlay">
-    <div class="dialog">
-      <h2 style="margin:0 0 8px 0;">❔ Aide rapide</h2>
-      <div class="small">
-        <p><b>But</b> : atteindre 0 points. La meilleure main fait payer des points au pire joueur.</p>
-        <p><b>Ordre des mains</b> : 421 &gt; 111 &gt; 11x &gt; Brelan &gt; Suite &gt; Paire &gt; Haute.<br/>
-           À égalité de points payés, <b>11x gagne</b> sur les autres.</p>
-        <p><b>Déroulé</b> : premier lancer auto des 3 dés. Ensuite, <b>aucun dé n’est sélectionné</b> ; clique ceux à relancer. Tu peux <b>terminer ton tour</b> après 1, 2 ou 3 lancers.</p>
-        <p><b>Fin</b> : un joueur à 0 est éliminé et ajouté au classement. La partie continue tant qu’il reste <b>au moins 2 joueurs</b>.</p>
-      </div>
-      <div class="row" style="margin-top:8px;">
-        <button id="closeHelpBtn">Fermer</button>
-      </div>
-    </div>
+  <!-- Create Game Form -->
+  <div id="createForm" class="screen hidden">
+    <h2>Créer une partie</h2>
+    <input id="createName" placeholder="Votre pseudo"><br>
+    <input id="createPoints" type="number" placeholder="Points de départ" value="21"><br>
+    <button onclick="createRoom()">Créer</button>
+    <button onclick="goBack()">Retour</button>
   </div>
 
-  <div id="toast" class="toast"></div>
+  <!-- Join Game Form -->
+  <div id="joinForm" class="screen hidden">
+    <h2>Rejoindre une partie</h2>
+    <input id="joinName" placeholder="Votre pseudo"><br>
+    <input id="joinCode" placeholder="Code de salle"><br>
+    <button onclick="joinRoom()">Rejoindre</button>
+    <button onclick="goBack()">Retour</button>
+  </div>
 
-  <!-- Firebase compat -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <!-- Lobby -->
+  <div id="lobby" class="screen hidden"></div>
 
-  <!-- Jeu -->
-  <script src="game.js"></script>
+  <script src="lobby.js"></script>
 </body>
 </html>
