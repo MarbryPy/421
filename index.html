@@ -10,8 +10,10 @@
     .card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:16px;margin-top:16px}
     .row{display:flex;gap:8px;flex-wrap:wrap} input,button{padding:10px 12px;border-radius:10px;border:1px solid #263245;background:#0b1220;color:#e5e7eb}
     button.primary{border-color:#164e63;background:#0e749022;cursor:pointer;font-weight:700}
+    button:disabled{opacity:.6;cursor:not-allowed}
     .hidden{display:none} ul{list-style:none;padding:0;margin:8px 0 0} li{padding:8px;border:1px solid #263245;border-radius:8px;margin-top:6px;display:flex;justify-content:space-between;align-items:center}
     .status{font-weight:700} .red{color:#ef4444} .green{color:#22d3ee}
+    .small{color:#94a3b8;font-size:13px}
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
@@ -32,22 +34,24 @@
     <section id="create" class="card hidden">
       <h2>Créer une partie</h2>
       <div class="row">
-        <input id="c_name" placeholder="Ton pseudo">
+        <input id="c_name" placeholder="Ton pseudo" autocomplete="name">
         <input id="c_points" type="number" min="1" max="99" value="21" title="Points de départ">
         <button id="createBtn" class="primary">Créer</button>
         <button id="back1">Retour</button>
       </div>
+      <div id="c_err" class="small"></div>
     </section>
 
     <!-- Join -->
     <section id="join" class="card hidden">
       <h2>Rejoindre une partie</h2>
       <div class="row">
-        <input id="j_name" placeholder="Ton pseudo">
-        <input id="j_code" placeholder="Code (ex: 5L9QK)">
+        <input id="j_name" placeholder="Ton pseudo" autocomplete="username">
+        <input id="j_code" placeholder="Code (ex: 5L9QK)" autocapitalize="characters">
         <button id="joinBtn" class="primary">Rejoindre</button>
         <button id="back2">Retour</button>
       </div>
+      <div id="j_err" class="small"></div>
     </section>
 
     <!-- Lobby -->
@@ -56,14 +60,15 @@
       <div class="row" style="margin:6px 0 10px">
         <span id="youAre">—</span>
         <button id="readyBtn" class="primary">Je suis prêt</button>
-        <button id="startGameBtn" class="primary" style="margin-left:auto;">Lancer la partie</button>
+        <button id="startGameBtn" class="primary" style="margin-left:auto;display:none;" disabled>Lancer la partie</button>
       </div>
-      <div class="small">Partage le code pour inviter: <b id="shareCode">—</b></div>
+      <div class="small">Partage le code: <b id="shareCode">—</b></div>
       <ul id="players"></ul>
       <div id="hint" class="small" style="margin-top:8px;"></div>
     </section>
   </div>
 
-  <script src="lobby.js"></script>
+  <!-- Charge le script après le DOM -->
+  <script src="lobby.js" defer></script>
 </body>
 </html>
