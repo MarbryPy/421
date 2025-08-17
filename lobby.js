@@ -1,4 +1,4 @@
-/* Firebase */
+p0/* Firebase */
 const cfg = {
   apiKey:"AIzaSyB9QKf88f8YS3b8hQ_hbJC4rwre9UYNIUI",
   authDomain:"mon421-a1108.firebaseapp.com",
@@ -137,4 +137,3 @@ function renderPlayers(room){
   const allReady = list.length>=2 && list.every(p=>p.ready===true);
   $('#startGameBtn').disabled = !allReady;
 }
-```0
