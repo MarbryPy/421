@@ -1,11 +1,14 @@
-// ------------------ Firebase init ------------------
-const firebaseConfig = {
-  apiKey: "XXX",
-  authDomain: "XXX.firebaseapp.com",
-  databaseURL: "https://XXX-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "XXX",
+/* ===== Firebase init (compat) ===== */
+const cfg = {
+  apiKey: "AIzaSyB9QKf88f8YS3b8hQ_hbJC4rwre9UYNIUI",
+  authDomain: "mon421-a1108.firebaseapp.com",
+  databaseURL: "https://mon421-a1108-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mon421-a1108",
+  storageBucket: "mon421-a1108.appspot.com",
+  messagingSenderId: "354289081138",
+  appId: "1:354289081138:web:be104504732e1ef984952b"
 };
-firebase.initializeApp(firebaseConfig);
+firebase.initializeApp(cfg);
 const db = firebase.database();
 
 // ------------------ Elements ------------------
