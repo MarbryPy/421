@@ -240,22 +240,10 @@
         filter.frequency.value = 720;
         filter.Q.value = 0.7;
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.13, start + 0.035);
+        gain.gain.exponentialRampToValueAtTime(0.065, start + 0.035);
         gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
         noise.connect(filter).connect(gain).connect(context.destination);
         noise.start(start);
-        [0.08, 0.2, 0.34, 0.49, 0.61].forEach((offset, index) => {
-          const thud = context.createOscillator();
-          const thudGain = context.createGain();
-          thud.type = 'triangle';
-          thud.frequency.setValueAtTime(115 + index * 17, start + offset);
-          thud.frequency.exponentialRampToValueAtTime(58, start + offset + 0.055);
-          thudGain.gain.setValueAtTime(0.07, start + offset);
-          thudGain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.07);
-          thud.connect(thudGain).connect(context.destination);
-          thud.start(start + offset);
-          thud.stop(start + offset + 0.08);
-        });
       } catch (error) {
         console.debug('Audio unavailable', error);
       }
