@@ -1,208 +1,283 @@
-/* ===== Firebase init ===== */
-const cfg = {
-  apiKey: "AIzaSyB9QKf88f8YS3b8hQ_hbJC4rwre9UYNIUI",
-  authDomain: "mon421-a1108.firebaseapp.com",
-  databaseURL: "https://mon421-a1108-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "mon421-a1108",
-  storageBucket: "mon421-a1108.appspot.com",
-  messagingSenderId: "354289081138",
-  appId: "1:354289081138:web:be104504732e1ef984952b"
-};
-firebase.initializeApp(cfg);
-const db = firebase.database();
+(function (root) {
+  'use strict';
 
-/* ===== Variables globales ===== */
-let playerId = null;
-let roomCode = null;
-let localPlayer = null;
-let players = {};
-let currentTurn = 0;
-let rollsLeft = 3;
-let dice = [1, 1, 1];
-let selected = [false, false, false];
+  const DIE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
-/* ===== Helpers DB ===== */
-function set(path, value) {
-  db.ref(path).set(value);
-}
-function update(path, value) {
-  db.ref(path).update(value);
-}
+  function asArray(value) {
+    if (Array.isArray(value)) return value.slice();
+    if (!value || typeof value !== 'object') return [];
+    return Object.keys(value).sort((a, b) => Number(a) - Number(b)).map(key => value[key]);
+  }
 
-/* ===== Init ===== */
-document.getElementById("createBtn").onclick = () => {
-  playerId = genId();
-  roomCode = genRoom();
-  initRoom();
-};
-document.getElementById("joinBtn").onclick = () => {
-  playerId = genId();
-  roomCode = document.getElementById("roomCode").value.trim().toUpperCase();
-  joinRoom();
-};
+  function analyseHand(rawDice) {
+    const dice = asArray(rawDice).map(Number).sort((a, b) => b - a);
+    const key = dice.join('');
+    const counts = {};
+    dice.forEach(value => { counts[value] = (counts[value] || 0) + 1; });
+    const groups = Object.entries(counts).sort((a, b) => b[1] - a[1] || b[0] - a[0]);
 
-function genId() {
-  return Math.random().toString(36).substr(2, 5).toUpperCase();
-}
-function genRoom() {
-  return Math.random().toString(36).substr(2, 5).toUpperCase();
-}
+    if (key === '421') return { strength: 900, penalty: 8, label: '421' };
+    if (key === '111') return { strength: 800, penalty: 7, label: 'Brelan d’as' };
+    if (groups[0] && groups[0][1] === 3) {
+      const value = Number(groups[0][0]);
+      return { strength: 700 + value, penalty: value, label: `Brelan de ${value}` };
+    }
+    if (key === '654' || key === '543' || key === '432' || key === '321') {
+      return { strength: 600 + dice[0], penalty: 2, label: `Suite ${key}` };
+    }
+    if (groups[0] && groups[0][1] === 2) {
+      const pair = Number(groups[0][0]);
+      const kicker = Number(groups[1][0]);
+      return { strength: 500 + pair * 10 + kicker, penalty: 2, label: `Paire de ${pair}` };
+    }
+    const total = dice.reduce((sum, value) => sum + value, 0);
+    return { strength: total, penalty: 1, label: `${total} points` };
+  }
 
-/* ===== Création / rejoindre ===== */
-function initRoom() {
-  let nick = document.getElementById("nick").value || playerId;
-  set(`rooms/${roomCode}`, {
-    players: {
-      [playerId]: { name: nick, score: 21, dice: [1,1,1], done: false, rank: null }
-    },
-    order: [playerId],
-    turn: 0,
-    status: "waiting"
-  });
-  listenRoom();
-  showRoom();
-}
+  function activeIds(room) {
+    return asArray(room.order).filter(id => room.players && room.players[id] && Number(room.players[id].score) > 0);
+  }
 
-function joinRoom() {
-  let nick = document.getElementById("nick").value || playerId;
-  db.ref(`rooms/${roomCode}/players/${playerId}`).set({
-    name: nick, score: 21, dice: [1,1,1], done: false, rank: null
-  });
-  db.ref(`rooms/${roomCode}/order`).once("value").then(snap => {
-    let order = snap.val() || [];
-    order.push(playerId);
-    set(`rooms/${roomCode}/order`, order);
-  });
-  listenRoom();
-  showRoom();
-}
+  function nextPlayableIndex(room, fromIndex) {
+    const order = asArray(room.order);
+    for (let offset = 1; offset <= order.length; offset += 1) {
+      const index = (Number(fromIndex || 0) + offset) % order.length;
+      const id = order[index];
+      if (room.players[id] && Number(room.players[id].score) > 0 && !(room.roundHands || {})[id]) return index;
+    }
+    return -1;
+  }
 
-function showRoom() {
-  document.body.innerHTML = `<h2>Salle ${roomCode}</h2>
-    <div id="gameArea"></div>`;
-}
+  function appendLog(room, message) {
+    const log = asArray(room.log);
+    log.push({ message, at: Date.now() });
+    room.log = log.slice(-20);
+  }
 
-/* ===== Listener principal ===== */
-function listenRoom() {
-  db.ref(`rooms/${roomCode}`).on("value", snap => {
-    if (!snap.exists()) return;
-    let data = snap.val();
-    players = data.players || {};
-    currentTurn = data.turn || 0;
+  function settleRound(room) {
+    const hands = room.roundHands || {};
+    const ids = Object.keys(hands).filter(id => room.players[id]);
+    if (!ids.length) return room;
 
-    render(data);
-  });
-}
+    const analysed = ids.map(id => ({ id, hand: analyseHand(hands[id].dice) }));
+    const bestStrength = Math.max(...analysed.map(item => item.hand.strength));
+    const weakestStrength = Math.min(...analysed.map(item => item.hand.strength));
+    const best = analysed.filter(item => item.hand.strength === bestStrength);
+    const weakest = analysed.filter(item => item.hand.strength === weakestStrength);
+    const penalty = Math.max(...best.map(item => item.hand.penalty));
+    const bestNames = best.map(item => room.players[item.id].name).join(', ');
 
-/* ===== Rendu ===== */
-function render(data) {
-  let area = document.getElementById("gameArea");
-  if (!area) return;
-
-  let turnPlayerId = data.order[data.turn % data.order.length];
-  let turnPlayer = players[turnPlayerId];
-
-  let me = players[playerId];
-  let html = `<p>Tour de : <b>${turnPlayer.name}</b></p>`;
-  html += `<p>Lancers restants : ${rollsLeft}</p>`;
-
-  // Affichage dés
-  if (me) {
-    html += `<div id="diceArea">`;
-    dice.forEach((d, i) => {
-      html += `<button onclick="toggle(${i})" style="margin:4px;${selected[i]?'background:#ccc':''}">${d}</button>`;
+    weakest.forEach(item => {
+      const player = room.players[item.id];
+      player.score = Math.max(0, Number(player.score) - penalty);
     });
-    html += `</div>`;
-  }
 
-  // Boutons d'action
-  if (turnPlayerId === playerId) {
-    html += `<button onclick="roll()">Lancer</button>
-             <button onclick="endTurn()">Finir le tour</button>`;
-  }
+    const weakNames = weakest.map(item => room.players[item.id].name).join(', ');
+    appendLog(room, `${bestNames} remporte la manche. ${weakNames} perd ${penalty} jeton${penalty > 1 ? 's' : ''}.`);
 
-  // Scores
-  html += `<h3>Scores</h3><ul>`;
-  for (let pid in players) {
-    html += `<li>${players[pid].name}: ${players[pid].score} pts</li>`;
-  }
-  html += `</ul>`;
-
-  area.innerHTML = html;
-}
-
-/* ===== Dés ===== */
-function toggle(i) {
-  selected[i] = !selected[i];
-  render({turn:currentTurn, order:Object.keys(players)}); // refresh UI
-}
-
-function roll() {
-  if (rollsLeft <= 0) return;
-  for (let i=0;i<3;i++) {
-    if (selected[i]) dice[i] = 1 + Math.floor(Math.random()*6);
-  }
-  rollsLeft--;
-  update(`rooms/${roomCode}/players/${playerId}`, { dice: dice });
-}
-
-function endTurn() {
-  update(`rooms/${roomCode}/players/${playerId}`, { done: true, dice: dice });
-  rollsLeft = 3;
-  selected = [false,false,false];
-
-  // vérifier si tous les joueurs ont joué
-  db.ref(`rooms/${roomCode}/players`).once("value").then(snap => {
-    let all = snap.val();
-    let allDone = Object.values(all).every(p => p.done);
-    if (allDone) {
-      settle(all);
-    } else {
-      nextTurn();
+    const survivors = activeIds(room);
+    if (survivors.length <= 1) {
+      room.status = 'finished';
+      room.winnerId = survivors[0] || best[0].id;
+      room.finishedAt = Date.now();
+      room.turn = null;
+      appendLog(room, `${room.players[room.winnerId].name} gagne la partie !`);
+      return room;
     }
-  });
-}
 
-function nextTurn() {
-  db.ref(`rooms/${roomCode}/turn`).transaction(n => (n||0)+1);
-}
-
-function settle(all) {
-  // calculer main gagnante
-  let best = null;
-  let bestId = null;
-  for (let pid in all) {
-    let val = handValue(all[pid].dice);
-    if (!best || val > best) {
-      best = val;
-      bestId = pid;
-    }
-  }
-
-  // le perdant paye ?
-  for (let pid in all) {
-    if (pid !== bestId) {
-      all[pid].score -= best;
-      if (all[pid].score <= 0) {
-        all[pid].rank = Object.keys(all).length; // dernier
+    const order = asArray(room.order);
+    const previousStart = Number(room.roundStartIndex || 0);
+    let nextStart = previousStart;
+    for (let offset = 1; offset <= order.length; offset += 1) {
+      const candidate = (previousStart + offset) % order.length;
+      if (room.players[order[candidate]] && Number(room.players[order[candidate]].score) > 0) {
+        nextStart = candidate;
+        break;
       }
     }
-    all[pid].done = false;
+    room.roundNumber = Number(room.roundNumber || 1) + 1;
+    room.roundStartIndex = nextStart;
+    room.roundHands = {};
+    room.turn = { index: nextStart, dice: [1, 1, 1], rollsLeft: 3, nonce: Number(room.turnNonce || 0) + 1 };
+    room.turnNonce = room.turn.nonce;
+    return room;
   }
 
-  update(`rooms/${roomCode}/players`, all);
-  db.ref(`rooms/${roomCode}/turn`).set(0);
-}
+  function createController(options) {
+    const { db, roomCode, playerId, getRoom, onError } = options;
+    const roomRef = db.ref(`rooms/${roomCode}`);
+    let held = [false, false, false];
+    let seenNonce = null;
 
-function handValue(dice) {
-  // ordre spécial du 421
-  let s = dice.slice().sort((a,b)=>b-a).join("");
-  if (s==="421") return 50;
-  if (s==="111") return 40;
-  if (s==="666") return 36;
-  if (s==="555") return 30;
-  if (s==="444") return 24;
-  if (s==="333") return 18;
-  if (s==="222") return 12;
-  return dice.reduce((a,b)=>a+b,0);
-}
+    function fail(message) {
+      if (onError) onError(message);
+    }
+
+    async function mutate(mutator) {
+      let reason = '';
+      try {
+        let result = { committed: false };
+        for (let attempt = 0; attempt < 3 && !result.committed; attempt += 1) {
+          const prefetchedRoom = attempt === 0 ? getRoom() : (await roomRef.once('value')).val();
+          const seed = prefetchedRoom ? JSON.parse(JSON.stringify(prefetchedRoom)) : null;
+          let usedPrefetchedRoom = false;
+          result = await roomRef.transaction(room => {
+            if (!room && seed && !usedPrefetchedRoom) {
+              room = JSON.parse(JSON.stringify(seed));
+              usedPrefetchedRoom = true;
+            }
+            if (!room) { reason = 'Ce salon n’existe plus.'; return; }
+            const outcome = mutator(room);
+            if (typeof outcome === 'string') { reason = outcome; return; }
+            room.updatedAt = Date.now();
+            return room;
+          });
+        }
+        if (!result.committed && reason) fail(reason);
+        return result.committed;
+      } catch (error) {
+        console.error(error);
+        fail('La synchronisation a échoué. Réessaie dans un instant.');
+        return false;
+      }
+    }
+
+    function currentPlayerId(room) {
+      if (!room || !room.turn) return null;
+      return asArray(room.order)[Number(room.turn.index || 0)] || null;
+    }
+
+    function syncLocalTurn(room) {
+      const nonce = room && room.turn ? room.turn.nonce : null;
+      if (nonce !== seenNonce) {
+        seenNonce = nonce;
+        held = [false, false, false];
+      }
+    }
+
+    function toggleHold(index) {
+      const room = getRoom();
+      if (!room || room.status !== 'playing' || currentPlayerId(room) !== playerId) return;
+      if (Number(room.turn.rollsLeft) >= 3) return fail('Lance d’abord les trois dés.');
+      held[index] = !held[index];
+      render(room);
+    }
+
+    async function roll() {
+      const snapshot = getRoom();
+      if (!snapshot || !snapshot.turn) return;
+      const nonce = snapshot.turn.nonce;
+      const keep = held.slice();
+      const randomDice = [0, 0, 0].map(() => 1 + Math.floor(Math.random() * 6));
+      const committed = await mutate(room => {
+        if (room.status !== 'playing') return 'La partie n’est pas en cours.';
+        if (currentPlayerId(room) !== playerId) return 'Ce n’est pas ton tour.';
+        if (!room.turn || room.turn.nonce !== nonce) return 'Le tour a déjà avancé.';
+        if (Number(room.turn.rollsLeft) <= 0) return 'Tu as utilisé tes trois lancers.';
+        const firstRoll = Number(room.turn.rollsLeft) === 3;
+        const dice = asArray(room.turn.dice);
+        room.turn.dice = dice.map((value, index) => (firstRoll || !keep[index]) ? randomDice[index] : value);
+        room.turn.rollsLeft = Number(room.turn.rollsLeft) - 1;
+      });
+      if (committed && Number(snapshot.turn.rollsLeft) === 3) held = [false, false, false];
+    }
+
+    async function endTurn() {
+      const snapshot = getRoom();
+      const nonce = snapshot && snapshot.turn ? snapshot.turn.nonce : null;
+      await mutate(room => {
+        if (room.status !== 'playing') return 'La partie n’est pas en cours.';
+        if (currentPlayerId(room) !== playerId) return 'Ce n’est pas ton tour.';
+        if (!room.turn || room.turn.nonce !== nonce) return 'Le tour a déjà avancé.';
+        if (Number(room.turn.rollsLeft) === 3) return 'Lance les dés avant de valider.';
+
+        room.roundHands = room.roundHands || {};
+        room.roundHands[playerId] = { dice: asArray(room.turn.dice), at: Date.now() };
+        const hand = analyseHand(room.turn.dice);
+        appendLog(room, `${room.players[playerId].name} valide ${hand.label}.`);
+        const nextIndex = nextPlayableIndex(room, room.turn.index);
+        if (nextIndex >= 0) {
+          room.turnNonce = Number(room.turnNonce || 0) + 1;
+          room.turn = { index: nextIndex, dice: [1, 1, 1], rollsLeft: 3, nonce: room.turnNonce };
+        } else {
+          settleRound(room);
+        }
+      });
+    }
+
+    function renderDice(room, isMine) {
+      const container = document.getElementById('dice');
+      container.replaceChildren();
+      const rolled = Number(room.turn.rollsLeft) < 3;
+      asArray(room.turn.dice).forEach((value, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `die${held[index] ? ' held' : ''}`;
+        button.disabled = !isMine || !rolled;
+        button.setAttribute('aria-label', `Dé ${index + 1}: ${value}${held[index] ? ', gardé' : ''}`);
+        const face = document.createElement('span');
+        face.textContent = DIE[Number(value) - 1] || String(value);
+        const caption = document.createElement('small');
+        caption.textContent = held[index] ? 'Gardé' : (rolled && isMine ? 'Toucher pour garder' : '');
+        button.append(face, caption);
+        button.addEventListener('click', () => toggleHold(index));
+        container.appendChild(button);
+      });
+    }
+
+    function renderScores(room, targetId) {
+      const target = document.getElementById(targetId);
+      target.replaceChildren();
+      asArray(room.order).forEach(id => {
+        const player = room.players[id];
+        if (!player) return;
+        const row = document.createElement('div');
+        row.className = `score-row${id === currentPlayerId(room) ? ' active' : ''}${Number(player.score) <= 0 ? ' eliminated' : ''}`;
+        const name = document.createElement('span');
+        name.textContent = `${player.name}${id === playerId ? ' (toi)' : ''}`;
+        const score = document.createElement('strong');
+        score.textContent = Number(player.score) > 0 ? `${player.score} jeton${Number(player.score) > 1 ? 's' : ''}` : 'Éliminé';
+        row.append(name, score);
+        target.appendChild(row);
+      });
+    }
+
+    function render(room) {
+      if (!room || room.status !== 'playing' || !room.turn) return;
+      syncLocalTurn(room);
+      const turnId = currentPlayerId(room);
+      const isMine = turnId === playerId;
+      const turnPlayer = room.players[turnId];
+      document.getElementById('gameCode').textContent = roomCode;
+      document.getElementById('roundNumber').textContent = room.roundNumber || 1;
+      document.getElementById('turnMessage').textContent = isMine ? 'À toi de jouer !' : `Tour de ${turnPlayer ? turnPlayer.name : '…'}`;
+      const rollsLeft = Number(room.turn.rollsLeft);
+      document.getElementById('rollsBadge').textContent = `${rollsLeft} lancer${rollsLeft > 1 ? 's' : ''}`;
+      document.getElementById('gameHint').textContent = isMine
+        ? (rollsLeft === 3 ? 'Lance les trois dés.' : 'Touche les dés à garder, puis relance ou valide.')
+        : 'La partie se met à jour automatiquement.';
+      document.getElementById('rollBtn').disabled = !isMine || rollsLeft <= 0;
+      document.getElementById('endTurnBtn').disabled = !isMine || rollsLeft === 3;
+      document.getElementById('handLabel').textContent = rollsLeft < 3 ? analyseHand(room.turn.dice).label : '';
+      renderDice(room, isMine);
+      renderScores(room, 'scoreboard');
+
+      const log = document.getElementById('gameLog');
+      log.replaceChildren();
+      asArray(room.log).slice().reverse().forEach(entry => {
+        const item = document.createElement('p');
+        item.textContent = entry.message;
+        log.appendChild(item);
+      });
+    }
+
+    document.getElementById('rollBtn').onclick = roll;
+    document.getElementById('endTurnBtn').onclick = endTurn;
+
+    return { render, renderScores, roll, endTurn, toggleHold };
+  }
+
+  const api = { analyseHand, settleRound, activeIds, asArray, createController };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  if (root) root.Game421 = api;
+}(typeof window !== 'undefined' ? window : null));
