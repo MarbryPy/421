@@ -28,11 +28,19 @@ assert.ok(analyseHand([4, 2, 1]).strength > analyseHand([1, 1, 1]).strength);
 assert.ok(analyseHand([1, 1, 1]).strength > analyseHand([6, 6, 6]).strength);
 assert.ok(analyseHand([6, 5, 4]).strength > analyseHand([6, 6, 5]).strength);
 assert.ok(analyseHand([6, 6, 5]).strength > analyseHand([6, 5, 2]).strength);
+assert.equal(analyseHand([1, 1, 6]).penalty, 6, 'a pair of aces is worth the third die');
+assert.equal(analyseHand([1, 1, 3]).penalty, 3, 'a pair of aces tracks its kicker');
+assert.equal(analyseHand([2, 2, 6]).penalty, 2, 'other pairs remain worth two chips');
 assert.deepEqual(asArray({ 0: 'a', 1: 'b' }), ['a', 'b']);
 
 const normalRound = roomWith({ Alice: [4, 2, 1], Bob: [6, 5, 2], Chloé: [2, 2, 1] });
 settleRound(normalRound);
 assert.equal(normalRound.players.Bob.score, 29, 'the weakest hand receives the winning 421 penalty');
+
+const acePairRound = roomWith({ Alice: [1, 1, 6], Bob: [6, 4, 2] });
+settleRound(acePairRound);
+assert.equal(acePairRound.players.Alice.score, 15, 'a 116 winner gives six chips');
+assert.equal(acePairRound.players.Bob.score, 27, 'the 116 loser receives six chips');
 assert.equal(normalRound.players.Alice.score, 13, 'the winner gives away the chips');
 assert.equal(normalRound.players.Chloé.score, 21);
 assert.equal(normalRound.status, 'payout');

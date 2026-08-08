@@ -28,7 +28,11 @@
     if (groups[0] && groups[0][1] === 2) {
       const pair = Number(groups[0][0]);
       const kicker = Number(groups[1][0]);
-      return { strength: 500 + pair * 10 + kicker, penalty: 2, label: `Paire de ${pair}` };
+      return {
+        strength: 500 + pair * 10 + kicker,
+        penalty: pair === 1 ? kicker : 2,
+        label: pair === 1 ? 'Paire d’as' : `Paire de ${pair}`
+      };
     }
     const total = dice.reduce((sum, value) => sum + value, 0);
     return { strength: total, penalty: 1, label: `${total} points` };
@@ -162,6 +166,7 @@
     let seenNonce = null;
     let turnPromptDismissed = false;
     let rolling = false;
+    const pendingDieOrigins = new Map();
     const rollSounds = typeof Audio === 'undefined' ? [] : [null, 1, 2, 3].map(count => {
       if (!count) return null;
       const sound = new Audio(`assets/audio/toss-${count}.wav?v=2`);
@@ -213,6 +218,7 @@
       if (nonce !== seenNonce) {
         seenNonce = nonce;
         held = [false, false, false];
+        pendingDieOrigins.clear();
         turnPromptDismissed = false;
       }
     }
@@ -298,7 +304,6 @@
 
         room.roundHands = room.roundHands || {};
         const firstHand = Object.keys(room.roundHands).length === 0;
-        if (!firstHand && Number(room.turn.rollsLeft) > 0) return `Tu dois utiliser les ${allowedRolls} lancer${allowedRolls > 1 ? 's' : ''} fixés par le premier joueur.`;
         const usedRolls = allowedRolls - Number(room.turn.rollsLeft);
         if (firstHand) room.roundRollLimit = usedRolls;
         room.roundHands[playerId] = { dice: asArray(room.turn.dice), rollsUsed: usedRolls, at: Date.now() };
@@ -357,7 +362,10 @@
         button.style.pointerEvents = '';
         const zone = target && target.closest('[data-hold-zone]');
         origin = null;
-        if (moved && zone) setHold(index, zone.dataset.holdZone === 'true');
+        if (moved && zone) {
+          pendingDieOrigins.set(index, { x: event.clientX, y: event.clientY });
+          setHold(index, zone.dataset.holdZone === 'true');
+        }
         else if (!moved) toggleHold(index);
       };
       button.addEventListener('pointerup', finish);
@@ -372,6 +380,10 @@
     function renderDice(room, isMine) {
       const container = document.getElementById('dice');
       const keepContainer = document.getElementById('keepDice');
+      const previousPositions = new Map();
+      document.querySelectorAll('.dice-dropzone .die[data-die-index]').forEach(die => {
+        previousPositions.set(Number(die.dataset.dieIndex), die.getBoundingClientRect());
+      });
       container.replaceChildren();
       keepContainer.replaceChildren();
       const rolled = Number(room.turn.rollsLeft) < maxRolls(room.turn);
@@ -379,6 +391,8 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = `die${held[index] ? ' held' : ''}`;
+        button.dataset.dieIndex = index;
+        button.style.gridColumn = String(index + 1);
         button.disabled = !isMine;
         button.setAttribute('aria-label', `Dé ${index + 1}: ${value}${held[index] ? ', gardé' : ''}`);
         const face = document.createElement('span');
@@ -393,6 +407,19 @@
         };
         attachDrag(button, index, isMine, rolled);
         (held[index] ? keepContainer : container).appendChild(button);
+
+        const destination = button.getBoundingClientRect();
+        const dropOrigin = pendingDieOrigins.get(index);
+        const previous = previousPositions.get(index);
+        const x = dropOrigin ? dropOrigin.x - (destination.left + destination.width / 2) : (previous ? previous.left - destination.left : 0);
+        const y = dropOrigin ? dropOrigin.y - (destination.top + destination.height / 2) : (previous ? previous.top - destination.top : 0);
+        pendingDieOrigins.delete(index);
+        if ((Math.abs(x) > 1 || Math.abs(y) > 1) && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          button.animate([
+            { transform: `translate(${x}px, ${y}px) scale(1.03)` },
+            { transform: 'translate(0, 0) scale(1)' }
+          ], { duration: 300, easing: 'cubic-bezier(.2,.78,.25,1)' });
+        }
       });
       document.querySelector('.keep-zone').classList.toggle('has-dice', held.some(Boolean));
     }
@@ -582,10 +609,10 @@
       document.getElementById('gameHint').textContent = isMine
         ? (rollsLeft === allowedRolls
           ? (allowedRolls < 3 ? `Tu as ${allowedRolls} lancer${allowedRolls > 1 ? 's' : ''}, comme le premier joueur.` : 'Lance les trois dés.')
-          : (isRoundLeader ? 'Glisse les dés entre les deux zones, puis relance ou garde.' : `Tu dois aller jusqu’au ${allowedRolls}${allowedRolls === 1 ? 'er' : 'e'} lancer.`))
+          : (isRoundLeader ? 'Glisse les dés entre les deux zones, puis relance ou garde.' : 'Tu peux valider ta main ou utiliser les lancers restants.'))
         : 'La partie se met à jour automatiquement.';
       document.getElementById('rollBtn').disabled = rolling || !isMine || rollsLeft <= 0;
-      document.getElementById('endTurnBtn').disabled = rolling || !isMine || rollsLeft === allowedRolls || !isRoundLeader;
+      document.getElementById('endTurnBtn').disabled = rolling || !isMine || rollsLeft === allowedRolls;
       document.getElementById('rollBtn').querySelector('strong').textContent = rollsLeft === 1 ? 'Dernier lancer' : 'Lancer';
       document.getElementById('yourTurnPrompt').classList.toggle('hidden', !isMine || turnPromptDismissed);
       document.getElementById('handLabel').textContent = rollsLeft < allowedRolls ? analyseHand(room.turn.dice).label : '';

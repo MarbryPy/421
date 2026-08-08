@@ -18,7 +18,9 @@ Les lancers contiennent un `nonce` de tour pour empêcher un ancien clic ou une 
 
 ## Déroulement d’un tour et d’une manche
 
-Le premier joueur d’une manche dispose de trois lancers au maximum. Le nombre de lancers qu’il utilise avant de valider devient `roundRollLimit` : tous les joueurs suivants doivent utiliser exactement ce même nombre. Après le premier lancer, un joueur peut déplacer chaque dé entre la zone à relancer et la zone à garder, par glisser-déposer ou par toucher. Le dernier lancer autorisé valide automatiquement la main.
+Le premier joueur d’une manche dispose de trois lancers au maximum. Le nombre de lancers qu’il utilise avant de valider devient `roundRollLimit` : tous les joueurs suivants disposent au maximum de ce même nombre, mais peuvent valider plus tôt dès qu’ils souhaitent conserver leur main. Après le premier lancer, un joueur peut déplacer chaque dé entre la zone à relancer et la zone à garder, par glisser-déposer ou par toucher. Les dés conservent chacun une colonne stable pendant ces déplacements afin d’éviter un changement de cible sous le doigt. Le dernier lancer autorisé valide automatiquement la main.
+
+Une paire d’as vaut le troisième dé en jetons : `116` vaut donc 6 jetons et `113` en vaut 3. Les autres paires valent 2 jetons.
 
 Quand toutes les mains sont jouées, le salon passe à l’état `payout`. `roundResult` conserve les mains classées, les gagnants, les perdants et chaque transfert de jetons. Chaque meilleure main donne au maximum sa pénalité à la main la plus faible. Le perdant de la manche peut donc dépasser la mise de départ. En cas d’égalité entre plusieurs perdants, les jetons reçus sont répartis sans fraction et de manière déterministe. Une égalité complète ne déplace aucun jeton.
 
