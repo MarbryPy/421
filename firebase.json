@@ -10,6 +10,8 @@
       "README.md",
       "docs/**",
       "tests/**",
+      ".git/**",
+      "**/.git/**",
       "**/.*",
       "**/node_modules/**"
     ],
