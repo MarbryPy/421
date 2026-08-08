@@ -162,7 +162,13 @@
     let seenNonce = null;
     let turnPromptDismissed = false;
     let rolling = false;
-    let audioContext = null;
+    const rollSounds = typeof Audio === 'undefined' ? [] : [null, 1, 2, 3].map(count => {
+      if (!count) return null;
+      const sound = new Audio(`assets/audio/toss-${count}.wav`);
+      sound.preload = 'auto';
+      sound.volume = 0.48;
+      return sound;
+    });
 
     function fail(message) {
       if (onError) onError(message);
@@ -226,33 +232,11 @@
       setHold(index, !held[index]);
     }
 
-    function playRollSound() {
-      try {
-        const AudioEngine = window.AudioContext || window.webkitAudioContext;
-        if (!AudioEngine) return;
-        audioContext = audioContext || new AudioEngine();
-        const context = audioContext;
-        if (context.state === 'suspended') context.resume();
-        const start = context.currentTime;
-        const duration = 0.7;
-        const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let index = 0; index < data.length; index += 1) data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
-        const noise = context.createBufferSource();
-        const filter = context.createBiquadFilter();
-        const gain = context.createGain();
-        noise.buffer = buffer;
-        filter.type = 'bandpass';
-        filter.frequency.value = 720;
-        filter.Q.value = 0.7;
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.065, start + 0.035);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-        noise.connect(filter).connect(gain).connect(context.destination);
-        noise.start(start);
-      } catch (error) {
-        console.debug('Audio unavailable', error);
-      }
+    function playRollSound(diceCount) {
+      const sound = rollSounds[Math.max(0, Math.min(3, Number(diceCount) || 0))];
+      if (!sound) return;
+      sound.currentTime = 0;
+      sound.play().catch(error => console.debug('Audio unavailable', error));
     }
 
     function animateRoll() {
@@ -274,10 +258,12 @@
       if (!snapshot || !snapshot.turn || rolling) return;
       const nonce = snapshot.turn.nonce;
       const keep = held.slice();
+      const firstRoll = Number(snapshot.turn.rollsLeft) === maxRolls(snapshot.turn);
+      const diceToRoll = firstRoll ? 3 : keep.filter(value => !value).length;
       const randomDice = [0, 0, 0].map(() => 1 + Math.floor(Math.random() * 6));
       rolling = true;
       render(snapshot);
-      playRollSound();
+      playRollSound(diceToRoll);
       await animateRoll();
       const committed = await mutate(room => {
         if (room.status !== 'playing') return 'La partie n’est pas en cours.';
