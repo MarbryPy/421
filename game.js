@@ -164,7 +164,7 @@
     let rolling = false;
     const rollSounds = typeof Audio === 'undefined' ? [] : [null, 1, 2, 3].map(count => {
       if (!count) return null;
-      const sound = new Audio(`assets/audio/toss-${count}.wav`);
+      const sound = new Audio(`assets/audio/toss-${count}.wav?v=2`);
       sound.preload = 'auto';
       sound.volume = 0.48;
       return sound;
