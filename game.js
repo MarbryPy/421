@@ -426,13 +426,39 @@
       const result = room && room.roundResult;
       if (!result) return;
       document.getElementById('payoutRound').textContent = result.roundNumber || room.roundNumber || 1;
-      const ranking = document.getElementById('payoutRanking');
-      ranking.replaceChildren();
       const winnerIds = asArray(result.winnerIds);
       const loserIds = asArray(result.loserIds);
-      asArray(result.ranked).forEach(item => {
+      const ranked = asArray(result.ranked);
+
+      function createDice(item) {
+        const dice = document.createElement('div');
+        dice.className = 'payout-dice';
+        asArray(item.dice).forEach(value => {
+          const die = document.createElement('i');
+          die.textContent = DIE[Number(value) - 1] || value;
+          dice.appendChild(die);
+        });
+        return dice;
+      }
+
+      function createScore(item) {
+        const score = document.createElement('div');
+        score.className = 'payout-score';
+        const delta = Number(item.scoreAfter) - Number(item.scoreBefore);
+        const total = document.createElement('strong');
+        total.textContent = item.scoreAfter;
+        const change = document.createElement('small');
+        change.textContent = `${delta > 0 ? `+${delta}` : delta || '—'} jeton${Math.abs(delta) > 1 ? 's' : ''}`;
+        const pile = document.createElement('span');
+        pile.className = 'payout-chip-dots';
+        for (let chip = 0; chip < Math.min(5, Math.ceil(Math.max(0, Number(item.scoreAfter)) / 5)); chip += 1) pile.appendChild(document.createElement('i'));
+        score.append(total, change, pile);
+        return score;
+      }
+
+      function createRankingRow(item) {
         const player = room.players[item.id];
-        if (!player) return;
+        if (!player) return null;
         const row = document.createElement('article');
         const winner = winnerIds.includes(item.id);
         const loser = loserIds.includes(item.id);
@@ -451,58 +477,82 @@
         const used = Number(item.rollsUsed) || 1;
         label.textContent = `${item.label} · ${used} lancer${used > 1 ? 's' : ''}`;
         identity.append(name, outcome, label);
-        const dice = document.createElement('div');
-        dice.className = 'payout-dice';
-        asArray(item.dice).forEach(value => {
-          const die = document.createElement('i');
-          die.textContent = DIE[Number(value) - 1] || value;
-          dice.appendChild(die);
-        });
-        const score = document.createElement('div');
-        score.className = 'payout-score';
-        const delta = Number(item.scoreAfter) - Number(item.scoreBefore);
-        const total = document.createElement('strong');
-        total.textContent = item.scoreAfter;
-        const change = document.createElement('small');
-        change.textContent = `${delta > 0 ? `+${delta}` : delta || '—'} jeton${Math.abs(delta) > 1 ? 's' : ''}`;
-        const pile = document.createElement('span');
-        pile.className = 'payout-chip-dots';
-        for (let chip = 0; chip < Math.min(5, Math.ceil(Math.max(0, Number(item.scoreAfter)) / 5)); chip += 1) pile.appendChild(document.createElement('i'));
-        score.append(total, change, pile);
-        row.append(rank, identity, dice, score);
-        ranking.appendChild(row);
-      });
-
-      const transfers = document.getElementById('payoutTransfers');
-      transfers.replaceChildren();
-      const transferList = asArray(result.transfers);
-      if (!transferList.length) {
-        const neutral = document.createElement('p');
-        neutral.textContent = 'Aucun jeton ne change de main.';
-        transfers.appendChild(neutral);
-      } else {
-        transferList.forEach(transfer => {
-          const from = room.players[transfer.from];
-          const to = room.players[transfer.to];
-          const flow = document.createElement('div');
-          flow.className = 'transfer-flow';
-          const fromName = document.createElement('strong');
-          fromName.textContent = from ? from.name : '—';
-          const track = document.createElement('span');
-          track.className = 'chip-track';
-          for (let chip = 0; chip < Math.min(8, Number(transfer.amount)); chip += 1) {
-            const token = document.createElement('i');
-            token.style.setProperty('--chip-delay', `${chip * 0.16}s`);
-            track.appendChild(token);
-          }
-          const toName = document.createElement('strong');
-          toName.textContent = to ? to.name : '—';
-          const amount = document.createElement('small');
-          amount.textContent = `${transfer.amount} jeton${Number(transfer.amount) > 1 ? 's' : ''}`;
-          flow.append(fromName, track, toName, amount);
-          transfers.appendChild(flow);
-        });
+        row.append(rank, identity, createDice(item), createScore(item));
+        return row;
       }
+
+      function createContender(item, winner) {
+        const player = room.players[item.id];
+        const card = document.createElement('article');
+        card.className = `payout-contender ${winner ? 'round-winner' : 'round-loser'}`;
+        const header = document.createElement('div');
+        header.className = 'contender-header';
+        const emblem = document.createElement('span');
+        emblem.className = 'payout-rank';
+        emblem.textContent = winner ? '♛' : `#${item.rank}`;
+        const identity = document.createElement('div');
+        const name = document.createElement('strong');
+        name.textContent = `${player.name}${item.id === playerId ? ' (toi)' : ''}`;
+        const outcome = document.createElement('span');
+        outcome.className = 'payout-outcome';
+        outcome.textContent = winner ? 'GAGNÉ' : 'PERDU';
+        identity.append(name, outcome);
+        header.append(emblem, identity);
+
+        const hand = document.createElement('div');
+        hand.className = 'contender-hand';
+        const used = Number(item.rollsUsed) || 1;
+        const label = document.createElement('small');
+        label.textContent = `${item.label} · ${used} lancer${used > 1 ? 's' : ''}`;
+        const handLine = document.createElement('div');
+        handLine.className = 'contender-hand-line';
+        handLine.append(createDice(item), createScore(item));
+        hand.append(label, handLine);
+        card.append(header, hand);
+        return card;
+      }
+
+      function createTransfer(transfer) {
+        const flow = document.createElement('div');
+        flow.className = 'duel-transfer';
+        const title = document.createElement('span');
+        title.textContent = 'Transfert';
+        const track = document.createElement('span');
+        track.className = 'chip-track';
+        const amountValue = Number(transfer && transfer.amount) || 0;
+        for (let chip = 0; chip < Math.min(8, amountValue); chip += 1) {
+          const token = document.createElement('i');
+          token.style.setProperty('--chip-delay', `${chip * 0.16}s`);
+          track.appendChild(token);
+        }
+        const amount = document.createElement('strong');
+        amount.textContent = amountValue ? `${amountValue} jeton${amountValue > 1 ? 's' : ''}` : 'Égalité';
+        flow.setAttribute('aria-label', amountValue ? `Transfert de ${amountValue} jetons du gagnant vers le perdant` : 'Aucun transfert de jetons');
+        flow.append(title, track, amount);
+        return flow;
+      }
+
+      const transferList = asArray(result.transfers);
+      const duel = document.getElementById('payoutDuel');
+      const winnerItem = ranked.find(item => item.id === winnerIds[0]);
+      const loserItem = ranked.find(item => item.id === loserIds[0]);
+      const simpleDuel = winnerIds.length === 1 && loserIds.length === 1 && winnerIds[0] !== loserIds[0] && winnerItem && loserItem;
+      if (simpleDuel) {
+        const transfer = transferList.find(item => item.from === winnerItem.id && item.to === loserItem.id) || transferList[0];
+        duel.replaceChildren(createContender(winnerItem, true), createTransfer(transfer), createContender(loserItem, false));
+        duel.classList.remove('hidden');
+      } else {
+        duel.replaceChildren();
+        duel.classList.add('hidden');
+      }
+
+      const otherItems = simpleDuel ? ranked.filter(item => item.id !== winnerItem.id && item.id !== loserItem.id) : ranked;
+      const others = document.getElementById('payoutOthers');
+      const ranking = document.getElementById('payoutRanking');
+      ranking.replaceChildren(...otherItems.map(createRankingRow).filter(Boolean));
+      others.classList.toggle('hidden', !otherItems.length);
+      document.getElementById('payoutOthersTitle').textContent = simpleDuel ? 'Mains des autres joueurs' : 'Classement de la manche';
+
       const continueButton = document.getElementById('continueRoundBtn');
       const canContinue = loserIds.includes(playerId);
       const roundLoser = room.players[loserIds[0]];
