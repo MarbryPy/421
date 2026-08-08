@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const SESSION_KEY = '421_session_v2';
   const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const screens = ['Welcome', 'Create', 'Join', 'Lobby', 'Game', 'Finished'];
+  const screens = ['Welcome', 'Create', 'Join', 'Lobby', 'Game', 'Payout', 'Finished'];
   const $ = id => document.getElementById(id);
 
   let db;
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setBusy(value) {
     busy = value;
-    ['createBtn', 'joinBtn', 'readyBtn', 'startGameBtn', 'newGameBtn'].forEach(id => {
+    ['createBtn', 'joinBtn', 'readyBtn', 'startGameBtn', 'continueRoundBtn', 'newGameBtn'].forEach(id => {
       if ($(id)) $(id).disabled = value;
     });
   }
@@ -139,8 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderFinished(currentRoom) {
     showScreen('Finished');
-    const winner = currentRoom.players && currentRoom.players[currentRoom.winnerId];
-    $('winnerMessage').textContent = winner ? `${winner.name} gagne la partie !` : 'Partie terminée';
+    const loser = currentRoom.players && currentRoom.players[currentRoom.loserId];
+    $('winnerMessage').textContent = loser ? `${loser.name} a perdu !` : 'Partie terminée';
     gameController.renderScores(currentRoom, 'finalScores');
     $('newGameBtn').classList.toggle('hidden', currentRoom.ownerId !== playerId);
     $('newGameBtn').disabled = busy;
@@ -163,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentRoom.status === 'playing') {
       showScreen('Game');
       gameController.render(currentRoom);
+    } else if (currentRoom.status === 'payout') {
+      showScreen('Payout');
+      gameController.renderPayout(currentRoom);
     } else if (currentRoom.status === 'finished') {
       renderFinished(currentRoom);
     } else {
@@ -351,7 +354,9 @@ document.addEventListener('DOMContentLoaded', () => {
         current.roundNumber = 1;
         current.roundStartIndex = 0;
         current.roundHands = {};
+        current.roundResult = null;
         current.winnerId = null;
+        current.loserId = null;
         current.turnNonce = Number(current.turnNonce || 0) + 1;
         current.turn = { index: 0, dice: [1, 1, 1], rollsLeft: 3, nonce: current.turnNonce };
         current.log = [{ message: 'La partie commence !', at: Date.now() }];
@@ -375,8 +380,10 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(current.players || {}).forEach(player => { player.ready = false; player.score = startPoints; });
         current.status = 'lobby';
         current.roundHands = null;
+        current.roundResult = null;
         current.turn = null;
         current.winnerId = null;
+        current.loserId = null;
         current.log = [];
         current.updatedAt = Date.now();
         return current;
@@ -404,7 +411,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const survivors = Game421.activeIds(current);
           if (survivors.length <= 1) {
             current.status = 'finished';
-            current.winnerId = survivors[0] || current.order[0];
+            current.loserId = survivors[0] || current.order[0];
+            current.winnerId = null;
             current.turn = null;
           } else if (oldTurnId === playerId) {
             const nextIndex = current.order.findIndex(id => Number(current.players[id].score) > 0 && !(current.roundHands || {})[id]);
