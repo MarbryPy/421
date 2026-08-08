@@ -233,11 +233,15 @@
         if (!player) return;
         const row = document.createElement('div');
         row.className = `score-row${id === currentPlayerId(room) ? ' active' : ''}${Number(player.score) <= 0 ? ' eliminated' : ''}`;
+        const avatar = document.createElement('span');
+        avatar.className = 'player-avatar';
+        avatar.textContent = String(player.name || '?').trim().charAt(0).toUpperCase() || '?';
         const name = document.createElement('span');
+        name.className = 'player-name';
         name.textContent = `${player.name}${id === playerId ? ' (toi)' : ''}`;
         const score = document.createElement('strong');
         score.textContent = Number(player.score) > 0 ? `${player.score} jeton${Number(player.score) > 1 ? 's' : ''}` : 'Éliminé';
-        row.append(name, score);
+        row.append(avatar, name, score);
         target.appendChild(row);
       });
     }

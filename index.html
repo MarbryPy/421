@@ -2,134 +2,115 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#07452f">
   <title>421 entre amis</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-  <script src="game.js?v=2" defer></script>
-  <script src="lobby.js?v=2" defer></script>
+  <script src="game.js?v=3" defer></script>
+  <script src="lobby.js?v=3" defer></script>
 </head>
-<body>
-  <header class="site-header">
-    <div>
-      <h1>🎲 421</h1>
-      <p id="connectionStatus" class="connection" role="status">Connexion…</p>
+<body class="is-loading">
+  <div id="loadingScreen" class="loading-screen" role="status" aria-label="Chargement du jeu">
+    <div class="loading-logo" aria-label="421"><span>4</span><span>2</span><span>1</span></div>
+    <div class="loading-dice" aria-hidden="true">
+      <i class="loading-die face-four"><b></b><b></b><b></b><b></b></i>
+      <i class="loading-die face-two"><b></b><b></b></i>
+      <i class="loading-die face-one"><b></b></i>
     </div>
-    <button id="leaveBtn" class="secondary compact hidden" type="button">Quitter</button>
+    <p>On secoue les dés…</p>
+  </div>
+
+  <header class="site-header">
+    <a class="mini-brand" href="." aria-label="Accueil 421"><span>4</span><span>2</span><span>1</span></a>
+    <p id="connectionStatus" class="connection" role="status"><i></i><span>Connexion…</span></p>
+    <button id="leaveBtn" class="icon-button leave-button hidden" type="button" aria-label="Quitter le salon" title="Quitter">×</button>
   </header>
 
   <main class="wrap">
-    <section id="screenWelcome" class="card screen">
-      <p class="eyebrow">Une partie rapide, sur plusieurs téléphones</p>
-      <h2>Prêt à jouer ?</h2>
-      <p class="muted">Crée un salon ou rejoins tes amis avec leur code.</p>
-      <div class="actions stack-mobile">
-        <button id="btnGoCreate" class="primary" type="button">Créer une partie</button>
-        <button id="btnGoJoin" type="button">Rejoindre une partie</button>
+    <section id="screenWelcome" class="screen welcome-screen">
+      <div class="hero-mark" aria-hidden="true">
+        <span class="hero-number">421</span>
+        <div class="hero-dice"><i>⚃</i><i>⚁</i><i>⚀</i></div>
+      </div>
+      <p class="tagline">Le comptoir est ouvert.</p>
+      <div class="menu-actions">
+        <button id="btnGoCreate" class="menu-action primary" type="button"><span class="action-icon">＋</span><strong>Créer</strong><small>une nouvelle table</small></button>
+        <button id="btnGoJoin" class="menu-action" type="button"><span class="action-icon">⌁</span><strong>Rejoindre</strong><small>avec un code</small></button>
       </div>
     </section>
 
-    <section id="screenCreate" class="card screen hidden">
-      <p class="eyebrow">Nouveau salon</p>
-      <h2>Créer une partie</h2>
+    <section id="screenCreate" class="screen form-screen hidden">
+      <button id="backFromCreate" class="back-button" type="button" aria-label="Retour">‹</button>
+      <div class="screen-title"><span class="title-icon">＋</span><div><p>Nouvelle table</p><h1>Créer une partie</h1></div></div>
       <label for="createName">Ton pseudo</label>
-      <input id="createName" maxlength="24" autocomplete="name" placeholder="Ex. Marie">
+      <div class="input-shell"><span>♟</span><input id="createName" maxlength="24" autocomplete="name" placeholder="Marie"></div>
       <label for="startPoints">Jetons de départ</label>
-      <input id="startPoints" type="number" inputmode="numeric" min="5" max="50" value="21">
-      <div class="actions stack-mobile">
-        <button id="createBtn" class="primary" type="button">Créer le salon</button>
-        <button id="backFromCreate" class="secondary" type="button">Retour</button>
-      </div>
+      <div class="input-shell"><span>●</span><input id="startPoints" type="number" inputmode="numeric" min="5" max="50" value="21"></div>
+      <button id="createBtn" class="big-action primary" type="button"><span>Installer la table</span><b>→</b></button>
       <p id="createError" class="error" role="alert"></p>
     </section>
 
-    <section id="screenJoin" class="card screen hidden">
-      <p class="eyebrow">Salon existant</p>
-      <h2>Rejoindre une partie</h2>
+    <section id="screenJoin" class="screen form-screen hidden">
+      <button id="backFromJoin" class="back-button" type="button" aria-label="Retour">‹</button>
+      <div class="screen-title"><span class="title-icon">⌁</span><div><p>Invitation</p><h1>Rejoindre la table</h1></div></div>
       <label for="joinName">Ton pseudo</label>
-      <input id="joinName" maxlength="24" autocomplete="name" placeholder="Ex. Alex">
-      <label for="joinCode">Code du salon</label>
-      <input id="joinCode" maxlength="5" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="ABCDE">
-      <div class="actions stack-mobile">
-        <button id="joinBtn" class="primary" type="button">Rejoindre</button>
-        <button id="backFromJoin" class="secondary" type="button">Retour</button>
-      </div>
+      <div class="input-shell"><span>♟</span><input id="joinName" maxlength="24" autocomplete="name" placeholder="Alex"></div>
+      <label for="joinCode">Code de la table</label>
+      <div class="input-shell code-input"><span>#</span><input id="joinCode" maxlength="5" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="ABCDE"></div>
+      <button id="joinBtn" class="big-action primary" type="button"><span>Prendre place</span><b>→</b></button>
       <p id="joinError" class="error" role="alert"></p>
     </section>
 
-    <section id="screenLobby" class="screen hidden">
-      <div class="card room-heading">
-        <div>
-          <p class="eyebrow">Salon</p>
-          <h2 id="lobbyCode">—</h2>
-        </div>
-        <div class="actions compact-actions">
-          <button id="copyCodeBtn" class="secondary compact" type="button">Copier</button>
-          <button id="shareBtn" class="secondary compact" type="button">Partager</button>
+    <section id="screenLobby" class="screen lobby-screen hidden">
+      <div class="room-code-block">
+        <p>Code de la table</p>
+        <h1 id="lobbyCode">—</h1>
+        <div class="share-actions">
+          <button id="copyCodeBtn" class="round-action" type="button" aria-label="Copier le code"><span>⧉</span><small>Copier</small></button>
+          <button id="shareBtn" class="round-action" type="button" aria-label="Partager l'invitation"><span>↗</span><small>Inviter</small></button>
         </div>
       </div>
-      <div class="card">
-        <div class="section-title">
-          <h3>Joueurs</h3>
-          <span id="playerCount" class="badge">0</span>
-        </div>
+      <div class="table-seats">
+        <div class="section-heading"><h2>Autour de la table</h2><span id="playerCount" class="player-count">0</span></div>
         <ul id="lobbyPlayers" class="player-list"></ul>
-        <p id="lobbyHint" class="muted"></p>
-        <div class="actions stack-mobile">
-          <button id="readyBtn" class="primary" type="button">Je suis prêt</button>
-          <button id="startGameBtn" class="primary hidden" type="button">Lancer la partie</button>
-        </div>
+      </div>
+      <div class="lobby-footer">
+        <p id="lobbyHint" class="hint"></p>
+        <button id="readyBtn" class="big-action primary" type="button"><span>Je suis prêt</span><b>✓</b></button>
+        <button id="startGameBtn" class="big-action gold hidden" type="button"><span>Lancer la partie</span><b>▶</b></button>
       </div>
     </section>
 
-    <section id="screenGame" class="screen hidden">
-      <div class="card game-heading">
-        <div>
-          <p class="eyebrow">Salon <span id="gameCode">—</span> · Manche <span id="roundNumber">1</span></p>
-          <h2 id="turnMessage">En attente…</h2>
-        </div>
-        <span id="rollsBadge" class="badge">3 lancers</span>
+    <section id="screenGame" class="screen game-screen hidden">
+      <div class="game-meta"><span>TABLE <b id="gameCode">—</b></span><span>MANCHE <b id="roundNumber">1</b></span><span id="rollsBadge" class="rolls-badge">3 lancers</span></div>
+      <div id="scoreboard" class="scoreboard" aria-label="Scores"></div>
+      <div class="turn-zone">
+        <p class="turn-kicker">Tour en cours</p>
+        <h1 id="turnMessage">En attente…</h1>
       </div>
-
-      <div class="game-grid">
-        <section class="card play-card">
-          <p id="gameHint" class="muted">Attends ton tour.</p>
-          <div id="dice" class="dice" aria-label="Les trois dés"></div>
-          <div class="actions game-actions">
-            <button id="rollBtn" class="primary" type="button">Lancer les dés</button>
-            <button id="endTurnBtn" type="button">Valider la main</button>
-          </div>
-          <p id="handLabel" class="hand-label"></p>
-        </section>
-
-        <section class="card">
-          <div class="section-title">
-            <h3>Scores</h3>
-            <span class="muted small">dernier joueur avec des jetons = gagnant</span>
-          </div>
-          <div id="scoreboard" class="scoreboard"></div>
-        </section>
+      <div class="dice-mat">
+        <div id="dice" class="dice" aria-label="Les trois dés"></div>
+        <p id="handLabel" class="hand-label"></p>
+        <p id="gameHint" class="game-hint">Attends ton tour.</p>
       </div>
-
-      <section class="card">
-        <h3>Derniers événements</h3>
-        <div id="gameLog" class="log" aria-live="polite"></div>
-      </section>
+      <div id="gameLog" class="log" aria-live="polite"></div>
+      <div class="game-actions">
+        <button id="rollBtn" class="roll-action" type="button"><span class="action-die">⚄</span><strong>Lancer</strong></button>
+        <button id="endTurnBtn" class="validate-action" type="button"><span>✓</span><strong>Garder</strong></button>
+      </div>
     </section>
 
-    <section id="screenFinished" class="card screen hidden finished">
-      <p class="eyebrow">Partie terminée</p>
-      <div class="trophy">🏆</div>
-      <h2 id="winnerMessage">Bravo !</h2>
-      <div id="finalScores" class="scoreboard"></div>
-      <div class="actions stack-mobile">
-        <button id="newGameBtn" class="primary hidden" type="button">Nouvelle partie</button>
-        <button id="backToLobbyBtn" class="secondary" type="button">Quitter le salon</button>
-      </div>
+    <section id="screenFinished" class="screen finished hidden">
+      <div class="trophy">♛</div>
+      <p class="turn-kicker">Partie terminée</p>
+      <h1 id="winnerMessage">Bravo !</h1>
+      <div id="finalScores" class="scoreboard final-scoreboard"></div>
+      <button id="newGameBtn" class="big-action gold hidden" type="button"><span>Rejouer</span><b>↻</b></button>
+      <button id="backToLobbyBtn" class="text-button" type="button">Quitter la table</button>
     </section>
   </main>
 

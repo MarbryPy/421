@@ -28,6 +28,18 @@ document.addEventListener('DOMContentLoaded', () => {
   let gameController = null;
   let busy = false;
   let hasConnected = false;
+  let activeScreen = null;
+  const loadingStartedAt = performance.now();
+
+  function finishLoading() {
+    const loader = $('loadingScreen');
+    if (!loader || loader.classList.contains('is-leaving')) return;
+    const remaining = Math.max(0, 900 - (performance.now() - loadingStartedAt));
+    setTimeout(() => {
+      loader.classList.add('is-leaving');
+      document.body.classList.remove('is-loading');
+    }, remaining);
+  }
 
   function randomRoomCode() {
     const values = new Uint32Array(5);
@@ -41,8 +53,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function showScreen(name) {
+    const changed = activeScreen !== name;
     screens.forEach(screen => $(`screen${screen}`).classList.toggle('hidden', screen !== name));
     $('leaveBtn').classList.toggle('hidden', !roomCode || name === 'Welcome' || name === 'Create' || name === 'Join');
+    activeScreen = name;
+    if (changed) window.scrollTo(0, 0);
   }
 
   function setBusy(value) {
@@ -475,6 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!window.firebase || !firebase.auth || !window.Game421) {
       $('connectionStatus').textContent = 'Application indisponible';
       toast('Les composants du jeu n’ont pas pu charger.', true);
+      finishLoading();
       return;
     }
     try {
@@ -501,9 +517,12 @@ document.addEventListener('DOMContentLoaded', () => {
           showScreen('Join');
         } else showScreen('Welcome');
       }
+      finishLoading();
     } catch (error) {
       $('connectionStatus').textContent = 'Connexion impossible';
       toast(errorMessage(error), true);
+      showScreen('Welcome');
+      finishLoading();
     }
   }
 
