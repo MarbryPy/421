@@ -371,8 +371,8 @@
         button.style.pointerEvents = '';
         const zone = target && target.closest('[data-hold-zone]');
         origin = null;
-        if (moved) button.dataset.dragCompleted = 'true';
         if (moved && zone) setHold(index, zone.dataset.holdZone === 'true');
+        else if (!moved) toggleHold(index);
       };
       button.addEventListener('pointerup', finish);
       button.addEventListener('pointercancel', () => {
@@ -400,11 +400,9 @@
         const caption = document.createElement('small');
         caption.textContent = held[index] ? 'Gardé' : '';
         button.append(face, caption);
-        button.onclick = () => {
-          if (button.dataset.dragCompleted === 'true') {
-            delete button.dataset.dragCompleted;
-            return;
-          }
+        button.onkeydown = event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
           toggleHold(index);
         };
         attachDrag(button, index, isMine, rolled);
