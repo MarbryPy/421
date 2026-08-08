@@ -354,11 +354,12 @@ document.addEventListener('DOMContentLoaded', () => {
         current.roundNumber = 1;
         current.roundStartIndex = 0;
         current.roundHands = {};
+        current.roundRollLimit = null;
         current.roundResult = null;
         current.winnerId = null;
         current.loserId = null;
         current.turnNonce = Number(current.turnNonce || 0) + 1;
-        current.turn = { index: 0, dice: [1, 1, 1], rollsLeft: 3, nonce: current.turnNonce };
+        current.turn = { index: 0, dice: [1, 1, 1], maxRolls: 3, rollsLeft: 3, nonce: current.turnNonce };
         current.log = [{ message: 'La partie commence !', at: Date.now() }];
         current.updatedAt = Date.now();
         return current;
@@ -380,6 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(current.players || {}).forEach(player => { player.ready = false; player.score = startPoints; });
         current.status = 'lobby';
         current.roundHands = null;
+        current.roundRollLimit = null;
         current.roundResult = null;
         current.turn = null;
         current.winnerId = null;
@@ -417,8 +419,9 @@ document.addEventListener('DOMContentLoaded', () => {
           } else if (oldTurnId === playerId) {
             const nextIndex = current.order.findIndex(id => Number(current.players[id].score) > 0 && !(current.roundHands || {})[id]);
             if (nextIndex >= 0) {
+              const nextMaxRolls = Math.max(1, Number(current.roundRollLimit) || 3);
               current.turnNonce = Number(current.turnNonce || 0) + 1;
-              current.turn = { index: nextIndex, dice: [1, 1, 1], rollsLeft: 3, nonce: current.turnNonce };
+              current.turn = { index: nextIndex, dice: [1, 1, 1], maxRolls: nextMaxRolls, rollsLeft: nextMaxRolls, nonce: current.turnNonce };
             } else {
               Game421.settleRound(current);
             }

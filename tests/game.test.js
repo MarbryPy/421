@@ -46,6 +46,14 @@ assert.equal(normalRound.status, 'playing');
 assert.equal(normalRound.roundNumber, 2);
 assert.equal(normalRound.turn.index, 1, 'round starter rotates');
 assert.deepEqual(normalRound.roundHands, {});
+assert.equal(normalRound.roundRollLimit, null);
+assert.equal(normalRound.turn.maxRolls, 3);
+
+const loserStarts = roomWith({ Alice: [4, 2, 1], Bob: [3, 3, 2], Chloé: [6, 4, 1] });
+settleRound(loserStarts);
+assert.deepEqual(loserStarts.roundResult.loserIds, ['Chloé']);
+beginNextRound(loserStarts);
+assert.equal(loserStarts.turn.index, 2, 'the previous round loser starts next');
 
 const elimination = roomWith({ Alice: [4, 2, 1], Bob: [6, 5, 2] }, { Alice: 5, Bob: 3 });
 settleRound(elimination);

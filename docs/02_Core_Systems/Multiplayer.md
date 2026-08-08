@@ -18,13 +18,13 @@ Les lancers contiennent un `nonce` de tour pour empêcher un ancien clic ou une 
 
 ## Déroulement d’un tour et d’une manche
 
-Un joueur dispose de trois lancers. Après le premier lancer, il peut déplacer chaque dé entre la zone à relancer et la zone à garder, par glisser-déposer ou par toucher. Le troisième lancer valide automatiquement la main.
+Le premier joueur d’une manche dispose de trois lancers au maximum. Le nombre de lancers qu’il utilise avant de valider devient `roundRollLimit` : tous les joueurs suivants doivent utiliser exactement ce même nombre. Après le premier lancer, un joueur peut déplacer chaque dé entre la zone à relancer et la zone à garder, par glisser-déposer ou par toucher. Le dernier lancer autorisé valide automatiquement la main.
 
 Quand toutes les mains sont jouées, le salon passe à l’état `payout`. `roundResult` conserve les mains classées, les gagnants, les perdants et chaque transfert de jetons. Chaque meilleure main donne au maximum sa pénalité à la main la plus faible. Le perdant de la manche peut donc dépasser la mise de départ. En cas d’égalité entre plusieurs perdants, les jetons reçus sont répartis sans fraction et de manière déterministe. Une égalité complète ne déplace aucun jeton.
 
 Un joueur qui atteint zéro jeton a réussi à sortir de la partie. Quand il ne reste plus qu’un joueur avec des jetons, celui-ci est enregistré comme `loserId` et perd la partie.
 
-Le récapitulatif reste synchronisé chez tous les joueurs. L’hôte démarre ensuite la manche suivante, ou affiche le vainqueur lorsque la partie est terminée.
+Le récapitulatif reste synchronisé chez tous les joueurs. Le perdant de la manche valide ensuite le passage et devient le premier joueur de la manche suivante. Si la partie est terminée, ce même joueur ouvre l’écran final.
 
 ## Sécurité
 

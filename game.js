@@ -38,6 +38,10 @@
     return asArray(room.order).filter(id => room.players && room.players[id] && Number(room.players[id].score) > 0);
   }
 
+  function maxRolls(turn) {
+    return Math.max(1, Math.min(3, Number(turn && turn.maxRolls) || 3));
+  }
+
   function nextPlayableIndex(room, fromIndex) {
     const order = asArray(room.order);
     for (let offset = 1; offset <= order.length; offset += 1) {
@@ -59,7 +63,12 @@
     const ids = Object.keys(hands).filter(id => room.players[id]);
     if (!ids.length) return room;
 
-    const analysed = ids.map(id => ({ id, dice: asArray(hands[id].dice), hand: analyseHand(hands[id].dice) }));
+    const analysed = ids.map(id => ({
+      id,
+      dice: asArray(hands[id].dice),
+      rollsUsed: Number(hands[id].rollsUsed) || 1,
+      hand: analyseHand(hands[id].dice)
+    }));
     const bestStrength = Math.max(...analysed.map(item => item.hand.strength));
     const weakestStrength = Math.min(...analysed.map(item => item.hand.strength));
     const best = analysed.filter(item => item.hand.strength === bestStrength);
@@ -105,6 +114,7 @@
         id: item.id,
         dice: item.dice,
         label: item.hand.label,
+        rollsUsed: item.rollsUsed,
         strength: item.hand.strength,
         rank: index + 1,
         scoreBefore: scoresBefore[item.id],
@@ -130,22 +140,18 @@
     }
 
     const order = asArray(room.order);
-    const previousStart = Number(room.roundStartIndex || 0);
-    let nextStart = previousStart;
-    for (let offset = 1; offset <= order.length; offset += 1) {
-      const candidate = (previousStart + offset) % order.length;
-      if (room.players[order[candidate]] && Number(room.players[order[candidate]].score) > 0) {
-        nextStart = candidate;
-        break;
-      }
-    }
+    const roundLoser = asArray(room.roundResult.loserIds)
+      .find(id => room.players[id] && Number(room.players[id].score) > 0);
+    let nextStart = Math.max(0, order.indexOf(roundLoser));
+    if (!roundLoser) nextStart = order.findIndex(id => room.players[id] && Number(room.players[id].score) > 0);
     room.status = 'playing';
     room.roundNumber = Number(room.roundNumber || 1) + 1;
     room.roundStartIndex = nextStart;
     room.roundHands = {};
+    room.roundRollLimit = null;
     room.roundResult = null;
     room.turnNonce = Number(room.turnNonce || 0) + 1;
-    room.turn = { index: nextStart, dice: [1, 1, 1], rollsLeft: 3, nonce: room.turnNonce };
+    room.turn = { index: nextStart, dice: [1, 1, 1], maxRolls: 3, rollsLeft: 3, nonce: room.turnNonce };
     return room;
   }
 
@@ -211,7 +217,7 @@
       turnPromptDismissed = true;
       const prompt = document.getElementById('yourTurnPrompt');
       if (prompt) prompt.classList.add('hidden');
-      if (Number(room.turn.rollsLeft) >= 3) return;
+      if (Number(room.turn.rollsLeft) >= maxRolls(room.turn)) return;
       held[index] = Boolean(value);
       render(room);
     }
@@ -278,13 +284,13 @@
         if (currentPlayerId(room) !== playerId) return 'Ce n’est pas ton tour.';
         if (!room.turn || room.turn.nonce !== nonce) return 'Le tour a déjà avancé.';
         if (Number(room.turn.rollsLeft) <= 0) return 'Tu as utilisé tes trois lancers.';
-        const firstRoll = Number(room.turn.rollsLeft) === 3;
+        const firstRoll = Number(room.turn.rollsLeft) === maxRolls(room.turn);
         const dice = asArray(room.turn.dice);
         room.turn.dice = dice.map((value, index) => (firstRoll || !keep[index]) ? randomDice[index] : value);
         room.turn.rollsLeft = Number(room.turn.rollsLeft) - 1;
       });
       rolling = false;
-      if (committed && Number(snapshot.turn.rollsLeft) === 3) held = [false, false, false];
+      if (committed && Number(snapshot.turn.rollsLeft) === maxRolls(snapshot.turn)) held = [false, false, false];
       if (committed && getRoom() && getRoom().status === 'playing') render(getRoom());
       if (committed && Number(snapshot.turn.rollsLeft) === 1) {
         await new Promise(resolve => setTimeout(resolve, 650));
@@ -301,16 +307,22 @@
         if (room.status !== 'playing') return 'La partie n’est pas en cours.';
         if (currentPlayerId(room) !== playerId) return 'Ce n’est pas ton tour.';
         if (!room.turn || room.turn.nonce !== nonce) return 'Le tour a déjà avancé.';
-        if (Number(room.turn.rollsLeft) === 3) return 'Lance les dés avant de valider.';
+        const allowedRolls = maxRolls(room.turn);
+        if (Number(room.turn.rollsLeft) === allowedRolls) return 'Lance les dés avant de valider.';
 
         room.roundHands = room.roundHands || {};
-        room.roundHands[playerId] = { dice: asArray(room.turn.dice), at: Date.now() };
+        const firstHand = Object.keys(room.roundHands).length === 0;
+        if (!firstHand && Number(room.turn.rollsLeft) > 0) return `Tu dois utiliser les ${allowedRolls} lancer${allowedRolls > 1 ? 's' : ''} fixés par le premier joueur.`;
+        const usedRolls = allowedRolls - Number(room.turn.rollsLeft);
+        if (firstHand) room.roundRollLimit = usedRolls;
+        room.roundHands[playerId] = { dice: asArray(room.turn.dice), rollsUsed: usedRolls, at: Date.now() };
         const hand = analyseHand(room.turn.dice);
         appendLog(room, `${room.players[playerId].name} valide ${hand.label}.`);
         const nextIndex = nextPlayableIndex(room, room.turn.index);
         if (nextIndex >= 0) {
+          const nextMaxRolls = Math.max(1, Number(room.roundRollLimit) || allowedRolls);
           room.turnNonce = Number(room.turnNonce || 0) + 1;
-          room.turn = { index: nextIndex, dice: [1, 1, 1], rollsLeft: 3, nonce: room.turnNonce };
+          room.turn = { index: nextIndex, dice: [1, 1, 1], maxRolls: nextMaxRolls, rollsLeft: nextMaxRolls, nonce: room.turnNonce };
         } else {
           settleRound(room);
         }
@@ -320,7 +332,7 @@
     async function continueRound() {
       await mutate(room => {
         if (room.status !== 'payout') return 'Le résultat de la manche n’est plus disponible.';
-        if (room.ownerId !== playerId) return 'Seul l’hôte peut lancer la manche suivante.';
+        if (!asArray(room.roundResult && room.roundResult.loserIds).includes(playerId)) return 'Le perdant de la manche lance la suivante.';
         beginNextRound(room);
       });
     }
@@ -376,7 +388,7 @@
       const keepContainer = document.getElementById('keepDice');
       container.replaceChildren();
       keepContainer.replaceChildren();
-      const rolled = Number(room.turn.rollsLeft) < 3;
+      const rolled = Number(room.turn.rollsLeft) < maxRolls(room.turn);
       asArray(room.turn.dice).forEach((value, index) => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -415,7 +427,11 @@
         name.textContent = `${player.name}${id === playerId ? ' (toi)' : ''}`;
         const score = document.createElement('strong');
         score.textContent = Number(player.score) > 0 ? `${player.score} jeton${Number(player.score) > 1 ? 's' : ''}` : 'Sorti ✓';
-        row.append(avatar, name, score);
+        const chips = document.createElement('span');
+        chips.className = 'score-chips';
+        const visibleChips = Math.min(6, Math.ceil(Math.max(0, Number(player.score)) / 4));
+        for (let chip = 0; chip < visibleChips; chip += 1) chips.appendChild(document.createElement('i'));
+        row.append(avatar, name, score, chips);
         target.appendChild(row);
       });
     }
@@ -427,21 +443,28 @@
       const ranking = document.getElementById('payoutRanking');
       ranking.replaceChildren();
       const winnerIds = asArray(result.winnerIds);
+      const loserIds = asArray(result.loserIds);
       asArray(result.ranked).forEach(item => {
         const player = room.players[item.id];
         if (!player) return;
         const row = document.createElement('article');
         const winner = winnerIds.includes(item.id);
-        row.className = `payout-row${winner ? ' round-winner' : ''}`;
+        const loser = loserIds.includes(item.id);
+        const draw = winner && loser;
+        row.className = `payout-row${winner && !draw ? ' round-winner' : ''}${loser && !draw ? ' round-loser' : ''}`;
         const rank = document.createElement('span');
         rank.className = 'payout-rank';
         rank.textContent = winner ? '♛' : `#${item.rank}`;
         const identity = document.createElement('div');
         const name = document.createElement('strong');
         name.textContent = `${player.name}${item.id === playerId ? ' (toi)' : ''}`;
+        const outcome = document.createElement('span');
+        outcome.className = 'payout-outcome';
+        outcome.textContent = draw ? 'ÉGALITÉ' : (winner ? 'GAGNÉ' : (loser ? 'PERDU' : 'NEUTRE'));
         const label = document.createElement('small');
-        label.textContent = item.label;
-        identity.append(name, label);
+        const used = Number(item.rollsUsed) || 1;
+        label.textContent = `${item.label} · ${used} lancer${used > 1 ? 's' : ''}`;
+        identity.append(name, outcome, label);
         const dice = document.createElement('div');
         dice.className = 'payout-dice';
         asArray(item.dice).forEach(value => {
@@ -452,7 +475,14 @@
         const score = document.createElement('div');
         score.className = 'payout-score';
         const delta = Number(item.scoreAfter) - Number(item.scoreBefore);
-        score.innerHTML = `<strong>${item.scoreAfter}</strong><small>${delta > 0 ? `+${delta}` : delta || '—'}</small>`;
+        const total = document.createElement('strong');
+        total.textContent = item.scoreAfter;
+        const change = document.createElement('small');
+        change.textContent = `${delta > 0 ? `+${delta}` : delta || '—'} jeton${Math.abs(delta) > 1 ? 's' : ''}`;
+        const pile = document.createElement('span');
+        pile.className = 'payout-chip-dots';
+        for (let chip = 0; chip < Math.min(5, Math.ceil(Math.max(0, Number(item.scoreAfter)) / 5)); chip += 1) pile.appendChild(document.createElement('i'));
+        score.append(total, change, pile);
         row.append(rank, identity, dice, score);
         ranking.appendChild(row);
       });
@@ -466,18 +496,33 @@
         transfers.appendChild(neutral);
       } else {
         transferList.forEach(transfer => {
-          const line = document.createElement('p');
           const from = room.players[transfer.from];
           const to = room.players[transfer.to];
-          line.textContent = `${from ? from.name : '—'}  →  ${to ? to.name : '—'}  ·  ${transfer.amount}`;
-          transfers.appendChild(line);
+          const flow = document.createElement('div');
+          flow.className = 'transfer-flow';
+          const fromName = document.createElement('strong');
+          fromName.textContent = from ? from.name : '—';
+          const track = document.createElement('span');
+          track.className = 'chip-track';
+          for (let chip = 0; chip < Math.min(8, Number(transfer.amount)); chip += 1) {
+            const token = document.createElement('i');
+            token.style.setProperty('--chip-delay', `${chip * 0.16}s`);
+            track.appendChild(token);
+          }
+          const toName = document.createElement('strong');
+          toName.textContent = to ? to.name : '—';
+          const amount = document.createElement('small');
+          amount.textContent = `${transfer.amount} jeton${Number(transfer.amount) > 1 ? 's' : ''}`;
+          flow.append(fromName, track, toName, amount);
+          transfers.appendChild(flow);
         });
       }
       const continueButton = document.getElementById('continueRoundBtn');
-      const isOwner = room.ownerId === playerId;
-      continueButton.classList.toggle('hidden', !isOwner);
+      const canContinue = loserIds.includes(playerId);
+      const roundLoser = room.players[loserIds[0]];
+      continueButton.classList.toggle('hidden', !canContinue);
       continueButton.querySelector('span').textContent = result.gameFinished ? 'Voir le vainqueur' : 'Manche suivante';
-      document.getElementById('payoutHint').textContent = isOwner ? '' : 'L’hôte lancera la suite.';
+      document.getElementById('payoutHint').textContent = canContinue ? 'Tu ouvriras la prochaine manche.' : `${roundLoser ? roundLoser.name : 'Le perdant'} lancera la suite.`;
     }
 
     function render(room) {
@@ -490,15 +535,24 @@
       document.getElementById('roundNumber').textContent = room.roundNumber || 1;
       document.getElementById('turnMessage').textContent = isMine ? 'À toi de jouer !' : `Tour de ${turnPlayer ? turnPlayer.name : '…'}`;
       const rollsLeft = Number(room.turn.rollsLeft);
-      document.getElementById('rollsBadge').textContent = `${rollsLeft} lancer${rollsLeft > 1 ? 's' : ''}`;
+      const allowedRolls = maxRolls(room.turn);
+      const isRoundLeader = Object.keys(room.roundHands || {}).length === 0;
+      document.getElementById('rollsBadge').textContent = `${rollsLeft} lancer${rollsLeft > 1 ? 's' : ''}${allowedRolls < 3 ? ' max' : ''}`;
+      const rollLights = document.getElementById('rollLights');
+      rollLights.setAttribute('aria-label', `${rollsLeft} lancer${rollsLeft > 1 ? 's' : ''} restant${rollsLeft > 1 ? 's' : ''}`);
+      Array.from(rollLights.children).forEach((light, index) => {
+        light.classList.toggle('lit', index < rollsLeft);
+      });
       document.getElementById('gameHint').textContent = isMine
-        ? (rollsLeft === 3 ? 'Lance les trois dés.' : 'Glisse les dés entre les deux zones, puis relance ou garde.')
+        ? (rollsLeft === allowedRolls
+          ? (allowedRolls < 3 ? `Tu as ${allowedRolls} lancer${allowedRolls > 1 ? 's' : ''}, comme le premier joueur.` : 'Lance les trois dés.')
+          : (isRoundLeader ? 'Glisse les dés entre les deux zones, puis relance ou garde.' : `Tu dois aller jusqu’au ${allowedRolls}${allowedRolls === 1 ? 'er' : 'e'} lancer.`))
         : 'La partie se met à jour automatiquement.';
       document.getElementById('rollBtn').disabled = rolling || !isMine || rollsLeft <= 0;
-      document.getElementById('endTurnBtn').disabled = rolling || !isMine || rollsLeft === 3;
+      document.getElementById('endTurnBtn').disabled = rolling || !isMine || rollsLeft === allowedRolls || !isRoundLeader;
       document.getElementById('rollBtn').querySelector('strong').textContent = rollsLeft === 1 ? 'Dernier lancer' : 'Lancer';
       document.getElementById('yourTurnPrompt').classList.toggle('hidden', !isMine || turnPromptDismissed);
-      document.getElementById('handLabel').textContent = rollsLeft < 3 ? analyseHand(room.turn.dice).label : '';
+      document.getElementById('handLabel').textContent = rollsLeft < allowedRolls ? analyseHand(room.turn.dice).label : '';
       renderDice(room, isMine);
       renderScores(room, 'scoreboard');
 
