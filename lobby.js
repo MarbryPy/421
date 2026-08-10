@@ -475,6 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function bindUi() {
+    const pairOrderDialog = $('pairOrderDialog');
     $('btnGoCreate').onclick = () => showScreen('Create');
     $('btnGoJoin').onclick = () => showScreen('Join');
     $('backFromCreate').onclick = () => showScreen('Welcome');
@@ -488,6 +489,14 @@ document.addEventListener('DOMContentLoaded', () => {
     $('leaveBtn').onclick = leaveRoom;
     $('copyCodeBtn').onclick = () => copyOrShare(false);
     $('shareBtn').onclick = () => copyOrShare(true);
+    $('pairOrderBtn').onclick = () => {
+      if (typeof pairOrderDialog.showModal === 'function') pairOrderDialog.showModal();
+      else pairOrderDialog.setAttribute('open', '');
+    };
+    $('pairOrderCloseBtn').onclick = () => pairOrderDialog.close();
+    pairOrderDialog.addEventListener('click', event => {
+      if (event.target === pairOrderDialog) pairOrderDialog.close();
+    });
     $('joinCode').addEventListener('input', event => { event.target.value = event.target.value.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 5); });
     document.addEventListener('keydown', event => {
       if (event.key !== 'Enter') return;
