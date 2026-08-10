@@ -1,0 +1,35 @@
+# Système multijoueur
+
+## Modèle de salon
+
+Chaque salon se trouve sous `rooms/{CODE}` et utilise `schemaVersion: 2`. Il contient l'hôte, les réglages, les joueurs, leur ordre, l'état de la partie, le tour courant, les mains de la manche, le résultat de la dernière manche et un journal court.
+
+Le code de salon utilise cinq caractères non ambigus. Un salon accueille de 2 à 8 joueurs. L'hôte démarre lorsque tous les joueurs sont prêts.
+
+## Identité et présence
+
+Firebase Authentication crée une identité anonyme persistante par navigateur. Cette identité sert de clé joueur et permet de restaurer une session après actualisation. `onDisconnect` marque le joueur hors ligne ; une déconnexion ne le retire pas automatiquement de la partie.
+
+## Concurrence
+
+La création, l'entrée, l'état prêt, le démarrage, les tours, le départ d'un joueur et la remise à zéro utilisent des transactions Realtime Database. Les transactions sont amorcées avec une lecture confirmée lorsque le SDK présente d'abord un cache vide, puis réessayées jusqu'à trois fois.
+
+Les lancers contiennent un `nonce` de tour pour empêcher un ancien clic ou une réponse tardive d'écraser le tour suivant.
+
+## Déroulement d’un tour et d’une manche
+
+Le premier joueur d’une manche dispose de trois lancers au maximum. Le nombre de lancers qu’il utilise avant de valider devient `roundRollLimit`. Si un joueur suivant valide en moins de lancers, cette nouvelle valeur plus basse devient immédiatement la limite pour tous les joueurs qui n’ont pas encore joué. Le quota ne peut donc que diminuer pendant la manche. Après le premier lancer, un joueur peut déplacer chaque dé entre la zone à relancer et la zone à garder, par glisser-déposer ou par toucher. Les dés conservent chacun une colonne stable pendant ces déplacements afin d’éviter un changement de cible sous le doigt. Le dernier lancer autorisé valide automatiquement la main. Les mains déjà validées restent visibles pendant la manche, triées par puissance.
+
+La paire d’as est la plus forte des paires, devant les paires de 6 à 2. Elle vaut le troisième dé en jetons : `116` vaut donc 6 jetons et `113` en vaut 3. Les autres paires valent 2 jetons. À paire identique, le troisième dé départage les mains. Un bouton d’aide `Ordre mains`, disponible pendant le jeu, ouvre la hiérarchie visuelle complète : 421, brelan d’as, autres brelans, suites, paires et enfin mains aux points. Le panneau rappelle aussi le classement interne et la valeur en jetons de chaque famille.
+
+Quand toutes les mains sont jouées, le salon passe à l’état `payout`. `roundResult` conserve les mains classées, les gagnants, les perdants et chaque transfert de jetons. Chaque meilleure main donne au maximum sa pénalité à la main la plus faible. Le perdant de la manche peut donc dépasser la mise de départ. En cas d’égalité entre plusieurs perdants, les jetons reçus sont répartis sans fraction et de manière déterministe. Une égalité complète ne déplace aucun jeton.
+
+Un joueur qui atteint zéro jeton a réussi à sortir de la partie. Quand il ne reste plus qu’un joueur avec des jetons, celui-ci est enregistré comme `loserId` et perd la partie.
+
+Le récapitulatif reste synchronisé chez tous les joueurs. Le perdant de la manche valide ensuite le passage et devient le premier joueur de la manche suivante. Si la partie est terminée, ce même joueur ouvre l’écran final.
+
+## Sécurité
+
+Les règles dans `database.rules.json` exigent une authentification, un code valide et un schéma de salon cohérent. Elles acceptent les états `lobby`, `playing`, `payout` et `finished`, ainsi que des scores pouvant monter jusqu’à 1000 jetons. Un nouveau joueur peut seulement entrer dans un salon encore au lobby. Une fois membre, son client peut écrire l'état complet du salon : ce choix privilégie la simplicité d'un jeu privé entre amis et ne protège pas contre un participant malveillant.
+
+Les règles doivent être publiées séparément du site statique.

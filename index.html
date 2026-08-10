@@ -1,88 +1,167 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#0f172a" />
-  <title>421 – Lobby</title>
-  <style>
-    :root{--bg:#0f172a;--panel:#111827;--muted:#94a3b8;--fg:#e5e7eb;--btn:#0b1220;--bd:#263245;--accent:#22d3ee}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-    .wrap{max-width:560px;margin:0 auto;padding:16px}
-    .card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:14px;margin-top:12px}
-    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    h1{margin:0 0 6px 0} h2{margin:0 0 8px 0;color:var(--accent);font-size:18px}
-    input,button{width:100%;padding:14px 12px;border-radius:12px;border:1px solid var(--bd);background:var(--btn);color:var(--fg)}
-    button.primary{background:#0e749022;border-color:#164e63;font-weight:700}
-    button:disabled{opacity:.6} .hidden{display:none}
-    ul{list-style:none;margin:8px 0 0;padding:0}
-    li{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bd);border-radius:12px;padding:10px 12px;margin-top:8px}
-    .small{color:var(--muted);font-size:13px}
-    .st{font-weight:700}.red{color:#ef4444}.green{color:#22d3ee}
-    .share{display:flex;gap:8px;align-items:center;margin-top:8px}
-    @media(min-width:560px){input,button{width:auto}}
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#07452f">
+  <title>421 entre amis</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css?v=18">
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="game.js?v=18" defer></script>
+  <script src="lobby.js?v=18" defer></script>
 </head>
-<body>
-  <div class="wrap">
-    <h1>🎲 421</h1>
-
-    <!-- Welcome -->
-    <section id="screenWelcome" class="card">
-      <div class="row">
-        <button id="btnGoCreate" class="primary">Créer une partie</button>
-        <button id="btnGoJoin">Rejoindre une partie</button>
-      </div>
-    </section>
-
-    <!-- Create -->
-    <section id="screenCreate" class="card hidden">
-      <h2>Créer une partie</h2>
-      <div class="row">
-        <input id="c_name" placeholder="Ton pseudo" autocomplete="name" autocapitalize="words" />
-        <input id="c_points" type="number" inputmode="numeric" min="1" max="99" value="21" title="Points de départ" />
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button id="createBtn" class="primary">Créer</button>
-        <button id="back1">Retour</button>
-      </div>
-      <div id="c_err" class="small"></div>
-    </section>
-
-    <!-- Join -->
-    <section id="screenJoin" class="card hidden">
-      <h2>Rejoindre une partie</h2>
-      <div class="row">
-        <input id="j_name" placeholder="Ton pseudo" autocomplete="username" autocapitalize="words" />
-        <input id="j_code" placeholder="Code (ex: 5L9QK)" inputmode="latin-prose" autocapitalize="characters" maxlength="6" />
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button id="joinBtn" class="primary">Rejoindre</button>
-        <button id="back2">Retour</button>
-      </div>
-      <div id="j_err" class="small"></div>
-    </section>
-
-    <!-- Lobby -->
-    <section id="screenLobby" class="card hidden">
-      <h2>Salon <span id="roomCode">—</span></h2>
-      <div class="row" style="gap:6px;margin:6px 0 10px">
-        <span id="youAre" class="small">—</span>
-        <button id="readyBtn" class="primary">Je suis prêt</button>
-        <button id="startGameBtn" class="primary" style="margin-left:auto;display:none" disabled>Lancer</button>
-      </div>
-      <div class="share">
-        <span class="small">Code: <b id="shareCode">—</b></span>
-        <button id="copyCodeBtn">Copier</button>
-        <button id="shareBtn">Partager</button>
-      </div>
-      <ul id="players"></ul>
-      <div id="hint" class="small" style="margin-top:8px;"></div>
-    </section>
+<body class="is-loading">
+  <div id="loadingScreen" class="loading-screen" role="status" aria-label="Chargement du jeu">
+    <div class="loading-logo" aria-label="421"><span>4</span><span>2</span><span>1</span></div>
+    <div class="loading-dice" aria-hidden="true">
+      <i class="loading-die face-four"><b></b><b></b><b></b><b></b></i>
+      <i class="loading-die face-two"><b></b><b></b></i>
+      <i class="loading-die face-one"><b></b></i>
+    </div>
+    <p>On secoue les dés…</p>
   </div>
 
-  <script src="lobby.js" defer></script>
+  <header class="site-header">
+    <a class="mini-brand" href="." aria-label="Accueil 421"><span>4</span><span>2</span><span>1</span></a>
+    <p id="connectionStatus" class="connection" role="status"><i></i><span>Connexion…</span></p>
+    <button id="leaveBtn" class="icon-button leave-button hidden" type="button" aria-label="Quitter le salon" title="Quitter">×</button>
+  </header>
+
+  <main class="wrap">
+    <section id="screenWelcome" class="screen welcome-screen">
+      <div class="hero-mark" aria-hidden="true">
+        <span class="hero-number">421</span>
+        <div class="hero-dice"><i>⚃</i><i>⚁</i><i>⚀</i></div>
+      </div>
+      <p class="tagline">Le comptoir est ouvert.</p>
+      <div class="menu-actions">
+        <button id="btnGoCreate" class="menu-action primary" type="button"><span class="action-icon">＋</span><strong>Créer</strong><small>une nouvelle table</small></button>
+        <button id="btnGoJoin" class="menu-action" type="button"><span class="action-icon">⌁</span><strong>Rejoindre</strong><small>avec un code</small></button>
+      </div>
+    </section>
+
+    <section id="screenCreate" class="screen form-screen hidden">
+      <button id="backFromCreate" class="back-button" type="button" aria-label="Retour">‹</button>
+      <div class="screen-title"><span class="title-icon">＋</span><div><p>Nouvelle table</p><h1>Créer une partie</h1></div></div>
+      <label for="createName">Ton pseudo</label>
+      <div class="input-shell"><span>♟</span><input id="createName" maxlength="24" autocomplete="name" placeholder="Marie"></div>
+      <label for="startPoints">Jetons de départ</label>
+      <div class="input-shell"><span>●</span><input id="startPoints" type="number" inputmode="numeric" min="5" max="50" value="21"></div>
+      <button id="createBtn" class="big-action primary" type="button"><span>Installer la table</span><b>→</b></button>
+      <p id="createError" class="error" role="alert"></p>
+    </section>
+
+    <section id="screenJoin" class="screen form-screen hidden">
+      <button id="backFromJoin" class="back-button" type="button" aria-label="Retour">‹</button>
+      <div class="screen-title"><span class="title-icon">⌁</span><div><p>Invitation</p><h1>Rejoindre la table</h1></div></div>
+      <label for="joinName">Ton pseudo</label>
+      <div class="input-shell"><span>♟</span><input id="joinName" maxlength="24" autocomplete="name" placeholder="Alex"></div>
+      <label for="joinCode">Code de la table</label>
+      <div class="input-shell code-input"><span>#</span><input id="joinCode" maxlength="5" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="ABCDE"></div>
+      <button id="joinBtn" class="big-action primary" type="button"><span>Prendre place</span><b>→</b></button>
+      <p id="joinError" class="error" role="alert"></p>
+    </section>
+
+    <section id="screenLobby" class="screen lobby-screen hidden">
+      <div class="room-code-block">
+        <p>Code de la table</p>
+        <h1 id="lobbyCode">—</h1>
+        <div class="share-actions">
+          <button id="copyCodeBtn" class="round-action" type="button" aria-label="Copier le code"><span>⧉</span><small>Copier</small></button>
+          <button id="shareBtn" class="round-action" type="button" aria-label="Partager l'invitation"><span>↗</span><small>Inviter</small></button>
+        </div>
+      </div>
+      <div class="table-seats">
+        <div class="section-heading"><h2>Autour de la table</h2><span id="playerCount" class="player-count">0</span></div>
+        <ul id="lobbyPlayers" class="player-list"></ul>
+      </div>
+      <div class="lobby-footer">
+        <p id="lobbyHint" class="hint"></p>
+        <button id="readyBtn" class="big-action primary" type="button"><span>Je suis prêt</span><b>✓</b></button>
+        <button id="startGameBtn" class="big-action gold hidden" type="button"><span>Lancer la partie</span><b>▶</b></button>
+      </div>
+    </section>
+
+    <section id="screenGame" class="screen game-screen hidden">
+      <div class="game-meta"><span>TABLE <b id="gameCode">—</b></span><span>MANCHE <b id="roundNumber">1</b></span><span id="rollsBadge" class="rolls-badge">3 lancers</span><button id="pairOrderBtn" class="pair-help-button" type="button" aria-haspopup="dialog" aria-controls="pairOrderDialog"><b>?</b> Ordre mains</button></div>
+      <div id="scoreboard" class="scoreboard" aria-label="Scores"></div>
+      <div class="turn-zone">
+        <p class="turn-kicker">Tour en cours</p>
+        <h1 id="turnMessage">En attente…</h1>
+      </div>
+      <div id="rollLights" class="roll-lights" role="img" aria-label="3 lancers restants">
+        <i></i><i></i><i></i>
+      </div>
+      <div class="dice-mat">
+        <div id="yourTurnPrompt" class="your-turn-prompt hidden" aria-live="polite"><strong>À TOI !</strong><span>Lance le dé</span></div>
+        <div class="dice-zone keep-zone" data-hold-zone="true">
+          <div class="zone-label"><span>◆</span><strong>À garder</strong></div>
+          <div id="keepDice" class="dice dice-dropzone" aria-label="Dés gardés"></div>
+        </div>
+        <div class="zone-divider"><span>Fais glisser les dés</span></div>
+        <div class="dice-zone launch-zone" data-hold-zone="false">
+          <div class="zone-label"><span>↻</span><strong>À relancer</strong></div>
+          <div id="dice" class="dice dice-dropzone" aria-label="Dés à lancer"></div>
+        </div>
+        <p id="handLabel" class="hand-label"></p>
+        <p id="gameHint" class="game-hint">Attends ton tour.</p>
+      </div>
+      <section id="playedHands" class="played-hands hidden" aria-label="Classement des mains déjà jouées">
+        <div class="played-hands-heading"><strong>Mains jouées</strong><span>De la plus forte à la plus faible</span></div>
+        <div id="playedHandsList" class="played-hands-list"></div>
+      </section>
+      <div id="gameLog" class="log" aria-live="polite"></div>
+      <div class="game-actions">
+        <button id="rollBtn" class="roll-action" type="button"><span class="action-die">⚄</span><strong>Lancer</strong></button>
+        <button id="endTurnBtn" class="validate-action" type="button"><span>✓</span><strong>Garder</strong></button>
+      </div>
+    </section>
+
+    <section id="screenPayout" class="screen payout-screen hidden">
+      <p class="turn-kicker">Résultat de la manche <span id="payoutRound">1</span></p>
+      <h1>Les mains</h1>
+      <div id="payoutDuel" class="payout-duel"></div>
+      <section id="payoutOthers" class="payout-others">
+        <h2 id="payoutOthersTitle">Mains des autres joueurs</h2>
+        <div id="payoutRanking" class="payout-ranking"></div>
+      </section>
+      <p id="payoutHint" class="hint"></p>
+      <button id="continueRoundBtn" class="big-action gold" type="button"><span>Manche suivante</span><b>→</b></button>
+    </section>
+
+    <section id="screenFinished" class="screen finished hidden">
+      <div class="trophy">☠</div>
+      <p class="turn-kicker">Partie terminée</p>
+      <h1 id="winnerMessage">Partie terminée</h1>
+      <div id="finalScores" class="scoreboard final-scoreboard"></div>
+      <button id="newGameBtn" class="big-action gold hidden" type="button"><span>Rejouer</span><b>↻</b></button>
+      <button id="backToLobbyBtn" class="text-button" type="button">Quitter la table</button>
+    </section>
+  </main>
+
+  <dialog id="pairOrderDialog" class="pair-order-dialog" aria-labelledby="pairOrderTitle">
+    <div class="pair-order-sheet">
+      <header>
+        <div><p>Aide</p><h2 id="pairOrderTitle">Ordre des mains</h2></div>
+        <button id="pairOrderCloseBtn" class="pair-order-close" type="button" aria-label="Fermer">×</button>
+      </header>
+      <p class="pair-order-intro">De la plus forte à la moins forte</p>
+      <ol class="pair-order-list">
+        <li class="pair-order-winner"><span class="pair-rank">1</span><span class="pair-dice"><i>⚃</i><i>⚁</i><i>⚀</i></span><strong>421</strong><small>8 jetons</small></li>
+        <li><span class="pair-rank">2</span><span class="pair-dice"><i>⚀</i><i>⚀</i><i>⚀</i></span><strong>Brelan d’as</strong><small>7 jetons</small></li>
+        <li><span class="pair-rank">3</span><span class="pair-dice"><i>⚅</i><i>⚅</i><i>⚅</i></span><strong>Autres brelans</strong><small>6 → 2 · valeur du dé en jetons</small></li>
+        <li><span class="pair-rank">4</span><span class="pair-dice"><i>⚅</i><i>⚄</i><i>⚃</i></span><strong>Suites</strong><small>654 → 543 → 432 → 321 · 2 jetons</small></li>
+        <li><span class="pair-rank">5</span><span class="pair-dice"><i>⚀</i><i>⚀</i><em>?</em></span><strong>Paires</strong><small>As → 6 → 5 → 4 → 3 → 2</small></li>
+        <li><span class="pair-rank">6</span><span class="pair-dice"><i>⚅</i><i>⚄</i><i>⚂</i></span><strong>Points</strong><small>Somme la plus haute · 1 jeton</small></li>
+      </ol>
+      <p class="pair-order-note"><b>Paire d’as :</b> le troisième dé donne les jetons. À paire égale, il départage aussi les mains. Les autres paires valent 2 jetons.</p>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript>Cette application a besoin de JavaScript pour fonctionner.</noscript>
 </body>
 </html>
