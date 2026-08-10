@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#07452f">
   <title>421 entre amis</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=18">
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-  <script src="game.js?v=17" defer></script>
-  <script src="lobby.js?v=17" defer></script>
+  <script src="game.js?v=18" defer></script>
+  <script src="lobby.js?v=18" defer></script>
 </head>
 <body class="is-loading">
   <div id="loadingScreen" class="loading-screen" role="status" aria-label="Chargement du jeu">
@@ -86,7 +86,7 @@
     </section>
 
     <section id="screenGame" class="screen game-screen hidden">
-      <div class="game-meta"><span>TABLE <b id="gameCode">—</b></span><span>MANCHE <b id="roundNumber">1</b></span><span id="rollsBadge" class="rolls-badge">3 lancers</span><button id="pairOrderBtn" class="pair-help-button" type="button" aria-haspopup="dialog" aria-controls="pairOrderDialog"><b>?</b> Ordre paires</button></div>
+      <div class="game-meta"><span>TABLE <b id="gameCode">—</b></span><span>MANCHE <b id="roundNumber">1</b></span><span id="rollsBadge" class="rolls-badge">3 lancers</span><button id="pairOrderBtn" class="pair-help-button" type="button" aria-haspopup="dialog" aria-controls="pairOrderDialog"><b>?</b> Ordre mains</button></div>
       <div id="scoreboard" class="scoreboard" aria-label="Scores"></div>
       <div class="turn-zone">
         <p class="turn-kicker">Tour en cours</p>
@@ -145,19 +145,19 @@
   <dialog id="pairOrderDialog" class="pair-order-dialog" aria-labelledby="pairOrderTitle">
     <div class="pair-order-sheet">
       <header>
-        <div><p>Aide</p><h2 id="pairOrderTitle">Ordre des paires</h2></div>
+        <div><p>Aide</p><h2 id="pairOrderTitle">Ordre des mains</h2></div>
         <button id="pairOrderCloseBtn" class="pair-order-close" type="button" aria-label="Fermer">×</button>
       </header>
       <p class="pair-order-intro">De la plus forte à la moins forte</p>
       <ol class="pair-order-list">
-        <li class="pair-order-winner"><span class="pair-rank">1</span><span class="pair-dice"><i>⚀</i><i>⚀</i><em>?</em></span><strong>Paire d’as</strong><small>Le 3e dé donne les jetons</small></li>
-        <li><span class="pair-rank">2</span><span class="pair-dice"><i>⚅</i><i>⚅</i><em>?</em></span><strong>Paire de 6</strong><small>2 jetons</small></li>
-        <li><span class="pair-rank">3</span><span class="pair-dice"><i>⚄</i><i>⚄</i><em>?</em></span><strong>Paire de 5</strong><small>2 jetons</small></li>
-        <li><span class="pair-rank">4</span><span class="pair-dice"><i>⚃</i><i>⚃</i><em>?</em></span><strong>Paire de 4</strong><small>2 jetons</small></li>
-        <li><span class="pair-rank">5</span><span class="pair-dice"><i>⚂</i><i>⚂</i><em>?</em></span><strong>Paire de 3</strong><small>2 jetons</small></li>
-        <li><span class="pair-rank">6</span><span class="pair-dice"><i>⚁</i><i>⚁</i><em>?</em></span><strong>Paire de 2</strong><small>2 jetons</small></li>
+        <li class="pair-order-winner"><span class="pair-rank">1</span><span class="pair-dice"><i>⚃</i><i>⚁</i><i>⚀</i></span><strong>421</strong><small>8 jetons</small></li>
+        <li><span class="pair-rank">2</span><span class="pair-dice"><i>⚀</i><i>⚀</i><i>⚀</i></span><strong>Brelan d’as</strong><small>7 jetons</small></li>
+        <li><span class="pair-rank">3</span><span class="pair-dice"><i>⚅</i><i>⚅</i><i>⚅</i></span><strong>Autres brelans</strong><small>6 → 2 · valeur du dé en jetons</small></li>
+        <li><span class="pair-rank">4</span><span class="pair-dice"><i>⚅</i><i>⚄</i><i>⚃</i></span><strong>Suites</strong><small>654 → 543 → 432 → 321 · 2 jetons</small></li>
+        <li><span class="pair-rank">5</span><span class="pair-dice"><i>⚀</i><i>⚀</i><em>?</em></span><strong>Paires</strong><small>As → 6 → 5 → 4 → 3 → 2</small></li>
+        <li><span class="pair-rank">6</span><span class="pair-dice"><i>⚅</i><i>⚄</i><i>⚂</i></span><strong>Points</strong><small>Somme la plus haute · 1 jeton</small></li>
       </ol>
-      <p class="pair-order-note"><b>À paire égale :</b> le troisième dé le plus fort gagne.</p>
+      <p class="pair-order-note"><b>Paire d’as :</b> le troisième dé donne les jetons. À paire égale, il départage aussi les mains. Les autres paires valent 2 jetons.</p>
     </div>
   </dialog>
 
