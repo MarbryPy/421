@@ -31,6 +31,8 @@ assert.ok(analyseHand([6, 6, 5]).strength > analyseHand([6, 5, 2]).strength);
 assert.equal(analyseHand([1, 1, 6]).penalty, 6, 'a pair of aces is worth the third die');
 assert.equal(analyseHand([1, 1, 3]).penalty, 3, 'a pair of aces tracks its kicker');
 assert.equal(analyseHand([2, 2, 6]).penalty, 2, 'other pairs remain worth two chips');
+assert.ok(analyseHand([1, 1, 2]).strength > analyseHand([6, 6, 5]).strength, 'a pair of aces beats every other pair');
+assert.ok(analyseHand([1, 1, 6]).strength > analyseHand([1, 1, 3]).strength, 'the kicker ranks equal pairs of aces');
 assert.deepEqual(asArray({ 0: 'a', 1: 'b' }), ['a', 'b']);
 
 const normalRound = roomWith({ Alice: [4, 2, 1], Bob: [6, 5, 2], Chloé: [2, 2, 1] });

@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#07452f">
   <title>421 entre amis</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-  <script src="game.js?v=15" defer></script>
-  <script src="lobby.js?v=15" defer></script>
+  <script src="game.js?v=16" defer></script>
+  <script src="lobby.js?v=16" defer></script>
 </head>
 <body class="is-loading">
   <div id="loadingScreen" class="loading-screen" role="status" aria-label="Chargement du jeu">
@@ -109,6 +109,11 @@
         <p id="handLabel" class="hand-label"></p>
         <p id="gameHint" class="game-hint">Attends ton tour.</p>
       </div>
+      <section id="playedHands" class="played-hands hidden" aria-label="Classement des mains déjà jouées">
+        <div class="played-hands-heading"><strong>Mains jouées</strong><span>De la plus forte à la plus faible</span></div>
+        <div id="playedHandsList" class="played-hands-list"></div>
+        <details class="pair-order"><summary>Ordre des paires</summary><p>As <b>›</b> 6 <b>›</b> 5 <b>›</b> 4 <b>›</b> 3 <b>›</b> 2. À paire égale, le troisième dé départage.</p></details>
+      </section>
       <div id="gameLog" class="log" aria-live="polite"></div>
       <div class="game-actions">
         <button id="rollBtn" class="roll-action" type="button"><span class="action-die">⚄</span><strong>Lancer</strong></button>

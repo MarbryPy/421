@@ -29,7 +29,7 @@
       const pair = Number(groups[0][0]);
       const kicker = Number(groups[1][0]);
       return {
-        strength: 500 + pair * 10 + kicker,
+        strength: 500 + (pair === 1 ? 70 : pair * 10) + kicker,
         penalty: pair === 1 ? kicker : 2,
         label: pair === 1 ? 'Paire d’as' : `Paire de ${pair}`
       };
@@ -305,7 +305,9 @@
         room.roundHands = room.roundHands || {};
         const firstHand = Object.keys(room.roundHands).length === 0;
         const usedRolls = allowedRolls - Number(room.turn.rollsLeft);
-        if (firstHand) room.roundRollLimit = usedRolls;
+        room.roundRollLimit = firstHand
+          ? usedRolls
+          : Math.min(Math.max(1, Number(room.roundRollLimit) || allowedRolls), usedRolls);
         room.roundHands[playerId] = { dice: asArray(room.turn.dice), rollsUsed: usedRolls, at: Date.now() };
         const hand = analyseHand(room.turn.dice);
         appendLog(room, `${room.players[playerId].name} valide ${hand.label}.`);
@@ -446,6 +448,43 @@
         for (let chip = 0; chip < visibleChips; chip += 1) chips.appendChild(document.createElement('i'));
         row.append(avatar, name, score, chips);
         target.appendChild(row);
+      });
+    }
+
+    function renderPlayedHands(room) {
+      const section = document.getElementById('playedHands');
+      const list = document.getElementById('playedHandsList');
+      const hands = Object.entries(room.roundHands || {}).map(([id, value]) => ({
+        id,
+        dice: asArray(value.dice),
+        rollsUsed: Number(value.rollsUsed) || 1,
+        hand: analyseHand(value.dice)
+      })).sort((left, right) => right.hand.strength - left.hand.strength);
+      section.classList.toggle('hidden', !hands.length);
+      list.replaceChildren();
+      hands.forEach((item, index) => {
+        const player = room.players[item.id];
+        if (!player) return;
+        const card = document.createElement('article');
+        card.className = `played-hand-card${index === 0 ? ' leading' : ''}`;
+        const rank = document.createElement('span');
+        rank.className = 'played-hand-rank';
+        rank.textContent = `#${index + 1}`;
+        const identity = document.createElement('div');
+        const name = document.createElement('strong');
+        name.textContent = `${player.name}${item.id === playerId ? ' (toi)' : ''}`;
+        const label = document.createElement('small');
+        label.textContent = `${item.hand.label} · ${item.rollsUsed} lancer${item.rollsUsed > 1 ? 's' : ''}`;
+        identity.append(name, label);
+        const dice = document.createElement('span');
+        dice.className = 'played-hand-dice';
+        item.dice.forEach(value => {
+          const die = document.createElement('i');
+          die.textContent = DIE[Number(value) - 1] || value;
+          dice.appendChild(die);
+        });
+        card.append(rank, identity, dice);
+        list.appendChild(card);
       });
     }
 
@@ -608,7 +647,7 @@
       });
       document.getElementById('gameHint').textContent = isMine
         ? (rollsLeft === allowedRolls
-          ? (allowedRolls < 3 ? `Tu as ${allowedRolls} lancer${allowedRolls > 1 ? 's' : ''}, comme le premier joueur.` : 'Lance les trois dés.')
+          ? (allowedRolls < 3 ? `Le quota est passé à ${allowedRolls} lancer${allowedRolls > 1 ? 's' : ''}.` : 'Lance les trois dés.')
           : (isRoundLeader ? 'Glisse les dés entre les deux zones, puis relance ou garde.' : 'Tu peux valider ta main ou utiliser les lancers restants.'))
         : 'La partie se met à jour automatiquement.';
       document.getElementById('rollBtn').disabled = rolling || !isMine || rollsLeft <= 0;
@@ -618,6 +657,7 @@
       document.getElementById('handLabel').textContent = rollsLeft < allowedRolls ? analyseHand(room.turn.dice).label : '';
       renderDice(room, isMine);
       renderScores(room, 'scoreboard');
+      renderPlayedHands(room);
 
       const log = document.getElementById('gameLog');
       log.replaceChildren();
